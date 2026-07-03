@@ -48,51 +48,120 @@ class PortalCadeteScreen extends StatefulWidget {
 
 class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
   String? _cadeteId;
+  String? _cadeteNombre;
   bool _estaRastreando = false;
   List<dynamic> _pedidosListos = [];
   bool _cargandoPedidos = false;
+  bool _logueando = false;
   String _ultimaUbicacionTexto = 'Esperando señal GPS...';
 
-  List<Map<String, String>> _cadetesDisponibles = []; // se carga desde la API
+  final TextEditingController _usuarioCtrl = TextEditingController();
+  final TextEditingController _claveCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _cargarDatos();
-    _fetchCadetes();
   }
 
-  // Carga dinámica de cadetes desde Chefsy DB
-  Future<void> _fetchCadetes() async {
-    try {
-      final res = await http.get(
-        Uri.parse('$_baseUrl/api/public/cadetes'),
-        headers: {'Authorization': 'Bearer $_token'},
-      );
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        final lista = (data['cadetes'] as List).map<Map<String, String>>((c) => {
-          'id': c['id'].toString(),
-          'nombre': c['nombre'].toString(),
-        }).toList();
-        if (mounted) setState(() => _cadetesDisponibles = lista);
-      }
-    } catch (_) {
-      // Silencioso: usa lista vacía si no hay conexión al arrancar
-    }
+  @override
+  void dispose() {
+    _usuarioCtrl.dispose();
+    _claveCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _cargarDatos() async {
     final prefs = await SharedPreferences.getInstance();
-    final guardado = prefs.getString('cadete_id');
+    final guardadoId = prefs.getString('cadete_id');
+    final guardadoNombre = prefs.getString('cadete_nombre');
     final isRunning = await FlutterForegroundTask.isRunningService;
 
     setState(() {
-      _cadeteId = guardado;
+      _cadeteId = guardadoId;
+      _cadeteNombre = guardadoNombre;
       _estaRastreando = isRunning;
     });
 
-    if (guardado != null) _fetchPedidos();
+    if (guardadoId != null) _fetchPedidos();
+  }
+
+  Future<void> _login() async {
+    final usr = _usuarioCtrl.text.trim().toLowerCase();
+    final clv = _claveCtrl.text;
+
+    if (usr.isEmpty || clv.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor ingresá tu usuario y contraseña.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _logueando = true);
+
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'usuario': usr, 'clave': clv}),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(res.body);
+
+      if (res.statusCode == 200 && data['ok'] == true) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('cadete_id', data['usuario']);
+        await prefs.setString('cadete_nombre', data['nombre'] ?? data['usuario']);
+
+        setState(() {
+          _cadeteId = data['usuario'];
+          _cadeteNombre = data['nombre'] ?? data['usuario'];
+          _logueando = false;
+        });
+
+        _usuarioCtrl.clear();
+        _claveCtrl.clear();
+        _fetchPedidos();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(data['error'] ?? 'Credenciales incorrectas.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error de conexión al iniciar sesión en Chefsy.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _logueando = false);
+    }
+  }
+
+  Future<void> _cerrarSesion() async {
+    if (_estaRastreando) {
+      await _detenerRastreo();
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('cadete_id');
+    await prefs.remove('cadete_nombre');
+
+    setState(() {
+      _cadeteId = null;
+      _cadeteNombre = null;
+      _pedidosListos = [];
+    });
   }
 
   // Solicitar permiso SOLO de primer plano (whileInUse) — no fuerza el de "siempre"
@@ -115,13 +184,11 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
   }
 
   Future<void> _iniciarRastreo() async {
-    // Pedir permiso de notificaciones en Android 13+ (requerido para mostrar la notificación del servicio)
     final notifPerm = await FlutterForegroundTask.checkNotificationPermission();
     if (notifPerm != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
     }
 
-    // Pedir permiso de ubicación
     final gpsOk = await _verificarPermisosGps();
     if (!gpsOk) {
       if (mounted) {
@@ -160,32 +227,21 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     }
   }
 
-
   Future<void> _detenerRastreo() async {
     await FlutterForegroundTask.stopService();
     if (mounted) {
       setState(() {
         _estaRastreando = false;
-        _ultimaUbicacionTexto = 'Rastreo detenido.';
+        _ultimaUbicacionTexto = 'Rastreo pausado.';
       });
     }
   }
 
-  Future<void> _toggleRastreo() async {
-    if (_cadeteId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('⚠️ Primero seleccioná tu usuario de cadete.'),
-          backgroundColor: Colors.amber,
-        ),
-      );
-      return;
-    }
-
+  void _toggleRastreo() {
     if (_estaRastreando) {
-      await _detenerRastreo();
+      _detenerRastreo();
     } else {
-      await _iniciarRastreo();
+      _iniciarRastreo();
     }
   }
 
@@ -207,44 +263,203 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     }
   }
 
-  void _abrirWhatsApp(String telefono, String cliente) async {
-    final num = telefono.replaceAll(RegExp(r'\D'), '');
-    final msg = Uri.encodeComponent(
-        '¡Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido.');
-    final url = Uri.parse('https://wa.me/549$num?text=$msg');
-    if (await canLaunchUrl(url)) await launchUrl(url);
+  Future<void> _abrirWhatsApp(String telefono, String cliente) async {
+    var tel = telefono.replaceAll(RegExp(r'\D'), '');
+    if (tel.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El cliente no tiene teléfono registrado')),
+      );
+      return;
+    }
+    if (!tel.startsWith('549') && !tel.startsWith('54')) {
+      if (tel.startsWith('0')) tel = tel.substring(1);
+      tel = '549$tel';
+    }
+    final url = Uri.parse(
+        'https://wa.me/$tel?text=${Uri.encodeComponent("Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido!")}');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo abrir WhatsApp')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_cadeteId == null) {
+      return _buildLoginScreen();
+    }
+    return _buildPortalScreen();
+  }
+
+  Widget _buildLoginScreen() {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFE11D48), Color(0xFF9F1239)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFE11D48).withValues(alpha: 0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.delivery_dining_rounded,
+                      size: 46, color: Colors.white),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'CHEFSY CADETERÍA',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Acceso Oficial con tu Usuario Chefsy',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                TextField(
+                  controller: _usuarioCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Usuario',
+                    prefixIcon: const Icon(Icons.person_outline_rounded),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _claveCtrl,
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Contraseña',
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE11D48),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 4,
+                    ),
+                    onPressed: _logueando ? null : _login,
+                    child: _logueando
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : const Text(
+                            'INICIAR SESIÓN',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPortalScreen() {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.delivery_dining, color: Color(0xFFF43F5E), size: 28),
-            SizedBox(width: 10),
-            Text('Chefsy Cadete',
-                style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+            const Text('🛵 Chefsy Cadetería',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: _estaRastreando
+                    ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                    : Colors.white10,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                _estaRastreando ? 'VIVO' : 'PAUSADO',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: _estaRastreando
+                        ? const Color(0xFF10B981)
+                        : Colors.white54),
+              ),
+            )
           ],
         ),
-        backgroundColor: const Color(0xFF131B2E),
-        elevation: 0,
+        backgroundColor: const Color(0xFF0F172A),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _fetchPedidos,
           ),
         ],
       ),
-      body: SafeArea(
+      body: WithForegroundTask(
         child: Padding(
           padding: const EdgeInsets.all(18.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Selector de Usuario
+              // Sesión activa info
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(18),
@@ -253,31 +468,35 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Sesión Repartidor:',
-                        style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white70)),
-                    DropdownButton<String>(
-                      value: _cadeteId,
-                      hint: const Text('Seleccionar'),
-                      underline: const SizedBox(),
-                      dropdownColor: const Color(0xFF1E293B),
-                      items: _cadetesDisponibles
-                          .map((c) => DropdownMenuItem(
-                                value: c['id'],
-                                child: Text(c['nombre']!.toUpperCase(),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white)),
-                              ))
-                          .toList(),
-                      onChanged: (val) async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString('cadete_id', val!);
-                        setState(() => _cadeteId = val);
-                        _fetchPedidos();
-                      },
+                    Row(
+                      children: [
+                        const Icon(Icons.account_circle_rounded,
+                            color: Color(0xFFE11D48), size: 28),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (_cadeteNombre ?? _cadeteId ?? '').toUpperCase(),
+                              style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white),
+                            ),
+                            const Text(
+                              'Sesión Repartidor Conectada',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.white54),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: Colors.white60),
+                      icon: const Icon(Icons.logout_rounded, size: 18),
+                      label: const Text('Salir', style: TextStyle(fontSize: 12)),
+                      onPressed: _cerrarSesion,
                     ),
                   ],
                 ),
@@ -375,7 +594,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('📦 PEDIDOS EN CURSO',
+                  const Text('📦 PEDIDOS ASIGNADOS',
                       style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
@@ -400,12 +619,10 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                                 size: 54,
                                 color: Colors.white.withValues(alpha: 0.15)),
                             const SizedBox(height: 12),
-                            Text(
-                              _cadeteId == null
-                                  ? 'Seleccioná tu usuario para ver pedidos'
-                                  : '🎉 Sin entregas pendientes ahora.',
+                            const Text(
+                              '🎉 Sin entregas pendientes ahora.',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: Colors.white54, fontSize: 14),
                             ),
                           ],
@@ -451,7 +668,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                                       child: Text(
                                         (p['estado'] ?? '')
                                             .toString()
-                                            .toUpperCase(),
+                                            .toUpperCase().replaceAll('_', ' '),
                                         style: const TextStyle(
                                             color: Color(0xFFFBBF24),
                                             fontSize: 11,
