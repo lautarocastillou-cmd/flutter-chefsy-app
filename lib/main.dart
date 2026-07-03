@@ -7,6 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'background_service.dart';
 
+// Token compartido con el servidor Chefsy — mismo que usa el endpoint GPS
+const _token = 'chefsy_expo_secure_track_99XQ';
+const _baseUrl = 'https://chefsy.xyz';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Inicializar configuración del foreground task (sin arrancarlo todavía)
@@ -49,16 +53,33 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
   bool _cargandoPedidos = false;
   String _ultimaUbicacionTexto = 'Esperando señal GPS...';
 
-  final List<Map<String, String>> _cadetesDisponibles = [
-    {'id': 'paulo', 'nombre': 'Paulo'},
-    {'id': 'juan', 'nombre': 'Juan'},
-    {'id': 'lautaro', 'nombre': 'Lautaro'},
-  ];
+  List<Map<String, String>> _cadetesDisponibles = []; // se carga desde la API
 
   @override
   void initState() {
     super.initState();
     _cargarDatos();
+    _fetchCadetes();
+  }
+
+  // Carga dinámica de cadetes desde Chefsy DB
+  Future<void> _fetchCadetes() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_baseUrl/api/public/cadetes'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final lista = (data['cadetes'] as List).map<Map<String, String>>((c) => {
+          'id': c['id'].toString(),
+          'nombre': c['nombre'].toString(),
+        }).toList();
+        if (mounted) setState(() => _cadetesDisponibles = lista);
+      }
+    } catch (_) {
+      // Silencioso: usa lista vacía si no hay conexión al arrancar
+    }
   }
 
   Future<void> _cargarDatos() async {
@@ -172,14 +193,13 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     if (_cadeteId == null) return;
     setState(() => _cargandoPedidos = true);
     try {
-      final res = await http.get(Uri.parse('https://chefsy.xyz/api/admin/pedidos'));
+      final res = await http.get(
+        Uri.parse('$_baseUrl/api/public/pedidos?cadeteId=$_cadeteId'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        setState(() {
-          _pedidosListos = (data['pedidos'] ?? []).where((p) =>
-              (p['estado'] == 'listo' || p['estado'] == 'en_camino') &&
-              p['cadete_id'] == _cadeteId).toList();
-        });
+        setState(() => _pedidosListos = data['pedidos'] ?? []);
       }
     } catch (_) {
     } finally {
