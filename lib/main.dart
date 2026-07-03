@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
@@ -46,7 +46,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
   bool _estaRastreando = false;
   List<dynamic> _pedidosListos = [];
   bool _cargandoPedidos = false;
-  String _ultimaUbicacionTexto = 'Esperando señal GPS...';
+  String _ultimaUbicacionTexto = 'Esperando seÃ±al GPS...';
 
   final List<Map<String, String>> _cadetesDisponibles = [
     {'id': 'paulo', 'nombre': 'Paulo'},
@@ -66,7 +66,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
       if (event != null && mounted) {
         setState(() {
           _ultimaUbicacionTexto =
-              'Lat: ${event['lat']?.toStringAsFixed(4)} • Lng: ${event['lng']?.toStringAsFixed(4)}';
+              'Lat: ${event['lat']?.toStringAsFixed(4)} â€¢ Lng: ${event['lng']?.toStringAsFixed(4)}';
         });
       }
     });
@@ -88,21 +88,45 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     }
   }
 
+  // VerificaciÃ³n de permisos en dos pasos obligatorios:
+  // 1ro: Permiso en primer plano (ACCESS_FINE_LOCATION)
+  // 2do: Permiso en segundo plano (ACCESS_BACKGROUND_LOCATION)
+  // Android exige que se soliciten por SEPARADO y en ese orden.
   Future<bool> _verificarPermisosGps() async {
     LocationPermission permission = await Geolocator.checkPermission();
+
+    // Paso 1: Solicitar permiso de primer plano si no estÃ¡ dado
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) return false;
     }
+
     if (permission == LocationPermission.deniedForever) return false;
+
+    // Causa #1 / Race Condition: Esperar que el diÃ¡logo de permisos del sistema
+    // cierre completamente ANTES de iniciar el Foreground Service.
+    // Sin este delay, Android puede crashear al intentar arrancar el servicio
+    // mientras la Activity de permisos todavÃ­a estÃ¡ activa en el stack.
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Paso 2: En Android 10+, el permiso de segundo plano (bolsillo) es una
+    // pantalla SEPARADA en ConfiguraciÃ³n. Si todavÃ­a no lo tiene, abrimos esa pantalla.
+    if (permission == LocationPermission.whileInUse) {
+      permission = await Geolocator.requestPermission();
+      // Si sigue siendo "whileInUse", el usuario no aprobÃ³ el segundo plano.
+      // Igual dejamos iniciar el servicio pero funcionarÃ¡ solo con pantalla encendida.
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
     return true;
   }
+
 
   Future<void> _toggleRastreo() async {
     if (_cadeteId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('⚠️ Primero selecciona tu usuario de cadete'),
+          content: Text('âš ï¸ Primero selecciona tu usuario de cadete'),
           backgroundColor: Colors.amber,
         ),
       );
@@ -123,7 +147,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('❌ Permisos de ubicación denegados o desactivados.'),
+              content: Text('âŒ Permisos de ubicaciÃ³n denegados o desactivados.'),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -133,7 +157,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
       await service.startService();
       setState(() {
         _estaRastreando = true;
-        _ultimaUbicacionTexto = 'Iniciando transmisión de fondo...';
+        _ultimaUbicacionTexto = 'Iniciando transmisiÃ³n de fondo...';
       });
     }
   }
@@ -161,7 +185,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
   void _abrirWhatsApp(String telefono, String cliente) async {
     final num = telefono.replaceAll(RegExp(r'\D'), '');
     final msg = Uri.encodeComponent(
-        '¡Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido.');
+        'Â¡Hola $cliente! Soy tu repartidor de Chefsy ðŸ›µ. Estoy en camino con tu pedido.');
     final url = Uri.parse('https://wa.me/549$num?text=$msg');
     if (await canLaunchUrl(url)) await launchUrl(url);
   }
@@ -203,7 +227,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Sesión Repartidor:',
+                    const Text('SesiÃ³n Repartidor:',
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white70)),
                     DropdownButton<String>(
                       value: _cadeteId,
@@ -229,7 +253,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
               ),
               const SizedBox(height: 22),
 
-              // Botón de Inicio de Turno y Rastreo en Segundo Plano
+              // BotÃ³n de Inicio de Turno y Rastreo en Segundo Plano
               GestureDetector(
                 onTap: _toggleRastreo,
                 child: AnimatedContainer(
@@ -248,7 +272,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                     borderRadius: BorderRadius.circular(28),
                     boxShadow: [
                       BoxShadow(
-                        color: (_estaRastreando ? const Color(0xFF10B981) : const Color(0xFFE11D48)).withOpacity(0.45),
+                        color: (_estaRastreando ? const Color(0xFF10B981) : const Color(0xFFE11D48)).withValues(alpha: 0.45),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       )
@@ -277,14 +301,14 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                             ? 'Podes apagar la pantalla. El GPS sigue reportando.'
                             : 'Toca para encender el servicio de fondo anti-crashes',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13),
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13),
                       ),
                       if (_estaRastreando) ...[
                         const SizedBox(height: 14),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.25),
+                            color: Colors.black.withValues(alpha: 0.25),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -299,11 +323,11 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
               ),
               const SizedBox(height: 28),
 
-              // Título Pedidos Asignados
+              // TÃ­tulo Pedidos Asignados
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('📦 PEDIDOS EN CURSO',
+                  const Text('ðŸ“¦ PEDIDOS EN CURSO',
                       style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1, color: Colors.white60)),
                   if (_cargandoPedidos)
                     const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
@@ -318,12 +342,12 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.inbox_rounded, size: 54, color: Colors.white.withOpacity(0.15)),
+                            Icon(Icons.inbox_rounded, size: 54, color: Colors.white.withValues(alpha: 0.15)),
                             const SizedBox(height: 12),
                             Text(
                               _cadeteId == null
                                   ? 'Selecciona tu usuario arriba para ver pedidos'
-                                  : '🎉 Sin entregas pendientes en este momento.',
+                                  : 'ðŸŽ‰ Sin entregas pendientes en este momento.',
                               textAlign: TextAlign.center,
                               style: const TextStyle(color: Colors.white54, fontSize: 14),
                             ),
@@ -339,7 +363,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF1E293B),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                             ),
                             padding: const EdgeInsets.all(18),
                             child: Column(
@@ -358,7 +382,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF59E0B).withOpacity(0.18),
+                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(
@@ -412,3 +436,4 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     );
   }
 }
+

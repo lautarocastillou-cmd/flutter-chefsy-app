@@ -6,9 +6,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-// URL de la API pública en Chefsy para recibir posiciones de cadetes
-const String API_URL = 'https://chefsy.xyz/api/public/ubicacion';
-const String EXPO_SECRET_TOKEN = 'chefsy_expo_secure_track_99XQ';
+const String apiUrl = 'https://chefsy.xyz/api/public/ubicacion';
+const String expoSecretToken = 'chefsy_expo_secure_track_99XQ';
+
+// Bandera global para evitar llamadas concurrentes al GPS en el mismo Isolate
+bool _gpsOcupado = false;
 
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
@@ -20,7 +22,7 @@ Future<void> initializeService() async {
       isForegroundMode: true,
       notificationChannelId: 'chefsy_tracking',
       initialNotificationTitle: '🛵 Chefsy Cadetería',
-      initialNotificationContent: 'Transmitiendo ubicación GPS en segundo plano...',
+      initialNotificationContent: 'GPS activo. Podes guardar el celular en el bolsillo.',
       foregroundServiceNotificationId: 888,
     ),
     iosConfiguration: IosConfiguration(
@@ -32,59 +34,88 @@ Future<void> initializeService() async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
+  // Garantizar que el motor de Flutter esté listo en este Isolate
   DartPluginRegistrant.ensureInitialized();
 
   service.on('stopService').listen((event) {
     service.stopSelf();
   });
 
-  // Temporizador cada 6 segundos para no drenar batería agresivamente pero mantener un rastro suave
-  Timer.periodic(const Duration(seconds: 6), (timer) async {
+  // Pre-cargar SharedPreferences UNA SOLA VEZ al iniciar el servicio.
+  // Evita el PlatformException de Xiaomi/Samsung al llamarlo en cada tick.
+  SharedPreferences? prefs;
+  try {
+    prefs = await SharedPreferences.getInstance();
+  } catch (e) {
+    // Si falla la inicialización de prefs, detener el servicio de forma ordenada
+    service.stopSelf();
+    return;
+  }
+
+  Timer.periodic(const Duration(seconds: 7), (timer) async {
+    // Evitar llamadas concurrentes al GPS si la anterior todavía no terminó
+    if (_gpsOcupado) return;
+    _gpsOcupado = true;
+
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cadeteId = prefs.getString('cadete_id');
-      
-      if (cadeteId == null || cadeteId.isEmpty) return;
-
-      // Obtener posición actual con alta precisión (GPS real)
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
-      // Si la precisión es muy mala (> 45 metros), ignorar el salto
-      if (position.accuracy > 45) {
+      final cadeteId = prefs?.getString('cadete_id');
+      if (cadeteId == null || cadeteId.isEmpty) {
+        _gpsOcupado = false;
         return;
       }
 
-      final response = await http.post(
-        Uri.parse(API_URL),
+      // Verificar que el permiso de ubicación sigue activo antes de leer el GPS
+      // (el usuario puede revocarlo desde Configuración mientras el servicio está corriendo)
+      final permiso = await Geolocator.checkPermission();
+      if (permiso == LocationPermission.denied || permiso == LocationPermission.deniedForever) {
+        _gpsOcupado = false;
+        return;
+      }
+
+      // Timeout explícito de 10 segundos para no acumular llamadas colgadas
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 10),
+        );
+      } on TimeoutException {
+        // GPS tardó demasiado (celular recién encendido, zona sin señal): saltar tick
+        _gpsOcupado = false;
+        return;
+      }
+
+      // Filtro anti-saltos: ignorar lecturas con precisión peor a 50 metros
+      if (position.accuracy > 50) {
+        _gpsOcupado = false;
+        return;
+      }
+
+      await http.post(
+        Uri.parse(apiUrl),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $EXPO_SECRET_TOKEN',
+          'Authorization': 'Bearer $expoSecretToken',
         },
         body: jsonEncode({
           'cadeteId': cadeteId,
           'lat': position.latitude,
           'lng': position.longitude,
           'accuracy': position.accuracy,
-          'speed': position.speed,
-          'heading': position.heading,
+          'speed': position.speed >= 0 ? position.speed : 0,
+          'heading': position.heading >= 0 ? position.heading : 0,
         }),
-      );
+      ).timeout(const Duration(seconds: 8));
 
-      if (response.statusCode == 200) {
-        // Enviar actualización a la interfaz visual si la app está en primer plano
-        service.invoke(
-          'updatePosition',
-          {
-            'lat': position.latitude,
-            'lng': position.longitude,
-            'time': DateTime.now().toIso8601String(),
-          },
-        );
-      }
+      service.invoke('updatePosition', {
+        'lat': position.latitude,
+        'lng': position.longitude,
+      });
     } catch (e) {
-      // Manejo de errores silencioso para que el servicio no muera ante fallos de red o zonas sin señal
+      // Silencioso: fallos de red, GPS no disponible, etc. no deben matar el servicio
+    } finally {
+      // SIEMPRE liberar la bandera aunque haya error para que el siguiente tick funcione
+      _gpsOcupado = false;
     }
   });
 }
