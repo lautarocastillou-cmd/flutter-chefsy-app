@@ -1,30 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="xyz.chefsy.chefsy_cadete">
 
-    <!-- Permisos esenciales para rastreo GPS y conexión en vivo -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- ACCESS_BACKGROUND_LOCATION se solicita en runtime si el usuario lo acepta, no en el manifiesto -->
-    
-    <!-- Permisos para Foreground Service anti-cierres con pantalla apagada en bolsillo -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="Chefsy Cadete"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- Servicio Nativo para evitar el Doze Mode en Android 12/13/14/15 -->
-        <!-- foregroundServiceType="location" removido: en Android 12-14 causa SecurityException
-             si ACCESS_BACKGROUND_LOCATION no está concedido ANTES de startService().
-             Un Foreground Service sin ese type puede igualmente leer GPS con ACCESS_FINE_LOCATION. -->
+        <!-- flutter_foreground_task: maneja Android 12/13/14 internamente -->
         <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:exported="true" />
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"
