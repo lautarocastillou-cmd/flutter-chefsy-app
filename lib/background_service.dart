@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -21,7 +22,7 @@ void initForegroundTask() {
       playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(4000),
+      eventAction: ForegroundTaskEventAction.repeat(4000), // Bucle de 4s para reportar simulación y checkouts
       autoRunOnBoot: false,
       allowWakeLock: true,
     ),
@@ -32,17 +33,84 @@ void initForegroundTask() {
 class GpsTaskHandler extends TaskHandler {
   SharedPreferences? _prefs;
   bool _ocupado = false;
+  StreamSubscription<Position>? _positionStreamSub;
+  DateTime? _ultimoReporteTime;
+  bool _simulacionActiva = false;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     try {
       _prefs = await SharedPreferences.getInstance();
-    } catch (_) {
-    }
+      _simulacionActiva = _prefs?.getBool('simulacion_activa') ?? false;
+
+      if (!_simulacionActiva) {
+        // --- MODO REAL: Suscripción reactiva al stream del GPS ---
+        final positionStream = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high, // Consumo optimizado (no bestForNavigation)
+            distanceFilter: 10,             // Notificar si se desplaza al menos 10 metros
+          ),
+        );
+
+        _positionStreamSub = positionStream.listen(
+          (Position position) {
+            _enviarUbicacionReal(position);
+          },
+          onError: (_) {},
+        );
+      }
+    } catch (_) {}
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
+    if (_ocupado) return;
+
+    try {
+      // Recargar preferencias por si cambia el estado dinámicamente
+      final simActiva = _prefs?.getBool('simulacion_activa') ?? false;
+      
+      if (simActiva) {
+        _ocupado = true;
+        
+        final cadeteId = _prefs?.getString('cadete_id');
+        if (cadeteId == null || cadeteId.isEmpty) return;
+
+        final double lat = _prefs?.getDouble('sim_lat') ?? -32.8894;
+        final double lng = _prefs?.getDouble('sim_lng') ?? -68.8458;
+
+        // Transmitir ubicación simulada
+        await http.post(
+          Uri.parse(apiUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $secretToken',
+          },
+          body: jsonEncode({
+            'cadeteId': cadeteId,
+            'lat': lat,
+            'lng': lng,
+            'accuracy': 5.0, // Alta precisión simulada
+            'speed': 25.0,   // Velocidad simulada de moto
+            'heading': 90.0, // Dirección simulada (Este)
+          }),
+        ).timeout(const Duration(seconds: 4));
+      }
+    } catch (_) {
+    } finally {
+      _ocupado = false;
+    }
+  }
+
+  void _enviarUbicacionReal(Position position) async {
+    final ahora = DateTime.now();
+    // Throttling: máximo un reporte cada 4 segundos para evitar spam al servidor
+    if (_ultimoReporteTime != null &&
+        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 4)) {
+      return;
+    }
+    _ultimoReporteTime = ahora;
+
     if (_ocupado) return;
     _ocupado = true;
 
@@ -50,17 +118,7 @@ class GpsTaskHandler extends TaskHandler {
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 
-      final perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) {
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.bestForNavigation,
-        timeLimit: const Duration(seconds: 4),
-      );
-
+      // Filtrado estricto de drifts
       if (position.accuracy > 35) return;
 
       await http.post(
@@ -85,7 +143,9 @@ class GpsTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onDestroy(DateTime timestamp) async {}
+  Future<void> onDestroy(DateTime timestamp) async {
+    await _positionStreamSub?.cancel();
+  }
 }
 
 @pragma('vm:entry-point')
