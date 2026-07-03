@@ -263,6 +263,38 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     }
   }
 
+  Future<void> _cambiarEstadoPedido(String id, String nuevoEstado) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/api/public/pedidos'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'accion': 'actualizar_estado',
+          'id': id,
+          'estado': nuevoEstado,
+        }),
+      );
+      if (res.statusCode == 200) {
+        _fetchPedidos();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo actualizar el estado.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al actualizar estado.')),
+        );
+      }
+    }
+  }
+
   Future<void> _abrirWhatsApp(String telefono, String cliente) async {
     var tel = telefono.replaceAll(RegExp(r'\D'), '');
     if (tel.isEmpty) {
@@ -632,95 +664,10 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
                         itemCount: _pedidosListos.length,
                         itemBuilder: (context, idx) {
                           final p = _pedidosListos[idx];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        p['cliente'] ?? 'Cliente',
-                                        style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 5),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF59E0B)
-                                            .withValues(alpha: 0.18),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        (p['estado'] ?? '')
-                                            .toString()
-                                            .toUpperCase().replaceAll('_', ' '),
-                                        style: const TextStyle(
-                                            color: Color(0xFFFBBF24),
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800),
-                                      ),
-                                    )
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on_rounded,
-                                        size: 16, color: Color(0xFFF43F5E)),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        p['direccion'] ?? 'Retiro en local',
-                                        style: const TextStyle(
-                                            color: Colors.white70, fontSize: 14),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF25D366),
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(14)),
-                                      elevation: 0,
-                                    ),
-                                    icon: const Icon(
-                                        Icons.chat_bubble_rounded,
-                                        size: 18),
-                                    label: const Text('AVISAR POR WHATSAPP',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 13,
-                                            letterSpacing: 0.5)),
-                                    onPressed: () => _abrirWhatsApp(
-                                        p['telefono'] ?? '',
-                                        p['cliente'] ?? ''),
-                                  ),
-                                ),
-                              ],
-                            ),
+                          return TarjetaPedidoCadete(
+                            pedido: p,
+                            onAbrirWhatsApp: _abrirWhatsApp,
+                            onCambiarEstado: _cambiarEstadoPedido,
                           );
                         },
                       ),
@@ -728,6 +675,420 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class TarjetaPedidoCadete extends StatelessWidget {
+  final dynamic pedido;
+  final Function(String telefono, String cliente) onAbrirWhatsApp;
+  final Function(String id, String nuevoEstado) onCambiarEstado;
+
+  const TarjetaPedidoCadete({
+    super.key,
+    required this.pedido,
+    required this.onAbrirWhatsApp,
+    required this.onCambiarEstado,
+  });
+
+  String formatearPrecio(dynamic total) {
+    if (total == null) return '\$0';
+    final numVal = num.tryParse(total.toString()) ?? 0;
+    final absVal = numVal.abs().toStringAsFixed(0);
+    final strFormatted = absVal.replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.');
+    return numVal < 0 ? '-\$$strFormatted' : '\$$strFormatted';
+  }
+
+  void _llamarCliente(BuildContext context, String? tel) async {
+    if (tel == null || tel.toString().trim().isEmpty || tel == 'Sin especificar') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sin número de teléfono registrado.')),
+      );
+      return;
+    }
+    final cleanTel = tel.toString().replaceAll(RegExp(r'\D'), '');
+    final url = Uri.parse('tel:$cleanTel');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir la app de llamadas.')),
+      );
+    }
+  }
+
+  void _abrirGoogleMaps(BuildContext context) async {
+    final coords = pedido['coordenadas'];
+    Uri url;
+    if (coords != null && coords is Map && coords['latitud'] != null) {
+      url = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${coords['latitud']},${coords['longitud']}');
+    } else {
+      final dir = pedido['direccion']?.toString() ?? '';
+      if (dir.isEmpty || dir == 'Retiro en local') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Es un pedido para retiro en local.')),
+        );
+        return;
+      }
+      url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(dir)}');
+    }
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir Google Maps.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = pedido['id']?.toString() ?? '';
+    final cliente = pedido['cliente']?.toString() ?? 'Cliente';
+    final telefono = pedido['telefono']?.toString() ?? 'Sin especificar';
+    final hora = pedido['hora']?.toString() ?? '';
+    final estado = pedido['estado']?.toString() ?? '';
+    final direccion = pedido['direccion']?.toString() ?? 'Retiro en local';
+    final distanciaKm = pedido['distanciaKm'];
+    final productos = pedido['productos'];
+    final total = pedido['total'];
+    final costoEnvio = pedido['costoEnvio'];
+    final metodoPago = pedido['metodoPago']?.toString() ?? '';
+    final pagoConfirmado = pedido['pago_confirmado'] == true;
+    final observaciones = pedido['observaciones']?.toString() ?? '';
+
+    Color colorEstadoBg = const Color(0xFF3B82F6).withValues(alpha: 0.18);
+    Color colorEstadoText = const Color(0xFF60A5FA);
+    if (estado == 'en_cocina') {
+      colorEstadoBg = const Color(0xFFF59E0B).withValues(alpha: 0.18);
+      colorEstadoText = const Color(0xFFFBBF24);
+    } else if (estado == 'listo') {
+      colorEstadoBg = const Color(0xFF10B981).withValues(alpha: 0.18);
+      colorEstadoText = const Color(0xFF34D399);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cabecera: Cliente y Estado
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cliente,
+                      style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          telefono == 'Sin especificar' ? 'Tel: No especificado' : 'Tel: $telefono',
+                          style: const TextStyle(fontSize: 12, color: Colors.white54),
+                        ),
+                        if (hora.isNotEmpty) ...[
+                          const Text(' • ', style: TextStyle(color: Colors.white38)),
+                          Text(
+                            hora,
+                            style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.bold),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: colorEstadoBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  estado.toUpperCase().replaceAll('_', ' '),
+                  style: TextStyle(
+                      color: colorEstadoText,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Botones rápidos: Llamar, WhatsApp, Google Maps
+          Row(
+            children: [
+              if (telefono != 'Sin especificar') ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF334155),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.phone_rounded, size: 15),
+                    label: const Text('Llamar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: () => _llamarCliente(context, telefono),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.chat_bubble_rounded, size: 15),
+                    label: const Text('WhatsApp', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: () => onAbrirWhatsApp(telefono, cliente),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3B82F6),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.map_rounded, size: 15),
+                  label: const Text('Maps', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => _abrirGoogleMaps(context),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Caja de Dirección / Delivery
+          GestureDetector(
+            onTap: () => _abrirGoogleMaps(context),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE11D48).withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'DIRECCIÓN DE ENTREGA',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white54,
+                            letterSpacing: 0.8),
+                      ),
+                      if (distanciaKm != null)
+                        Text(
+                          '(${num.tryParse(distanciaKm.toString())?.toStringAsFixed(1) ?? distanciaKm} km)',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFF43F5E)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_rounded, size: 18, color: Color(0xFFF43F5E)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          direccion,
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white),
+                        ),
+                      ),
+                      const Icon(Icons.navigation_rounded, size: 16, color: Colors.white38),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Lista de productos
+          if (productos != null && productos is List && productos.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: productos.map<Widget>((prod) {
+                  final nom = prod['nombre']?.toString() ?? 'Producto';
+                  final cant = prod['cantidad']?.toString() ?? '1';
+                  final esBebida = RegExp(r'coca|fanta|sprite|agua|cerveza|bebida|aquarius|gaseosa', caseSensitive: false).hasMatch(nom);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: Text(
+                      '$cant× $nom',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: esBebida ? FontWeight.w800 : FontWeight.w500,
+                        color: esBebida ? const Color(0xFFF43F5E) : Colors.white70,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+
+          // Cobrar y Método de Pago
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.only(top: 12),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Cobrar', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                    Text(
+                      formatearPrecio(total),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
+                    if (costoEnvio != null && (num.tryParse(costoEnvio.toString()) ?? 0) > 0)
+                      Text(
+                        '(Incluye ${formatearPrecio(costoEnvio)} envío)',
+                        style: const TextStyle(fontSize: 10, color: Colors.white38),
+                      ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      metodoPago.toUpperCase(),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white70),
+                    ),
+                    if (metodoPago.toLowerCase() == 'transferencia') ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: pagoConfirmado
+                              ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                              : const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          pagoConfirmado ? '✅ PAGADO' : '❌ Pendiente Impactar',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: pagoConfirmado ? const Color(0xFF34D399) : const Color(0xFFFBBF24)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Observaciones
+          if (observaciones.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                '⚠️ $observaciones',
+                style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+
+          // Botón de Acción de Estado (Marcar como listo / Entregar)
+          if (estado == 'en_cocina' || estado == 'listo' || estado == 'en_camino') ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: estado == 'en_cocina' ? const Color(0xFF10B981) : const Color(0xFFE11D48),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 2,
+                ),
+                icon: Icon(
+                  estado == 'en_cocina' ? Icons.check_circle_outline_rounded : Icons.delivery_dining_rounded,
+                  size: 20,
+                ),
+                label: Text(
+                  estado == 'en_cocina' ? 'MARCAR COMO LISTO' : 'MARCAR COMO ENTREGADO',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 0.8),
+                ),
+                onPressed: () {
+                  final nuevoEstado = estado == 'en_cocina' ? 'listo' : 'entregado';
+                  onCambiarEstado(id, nuevoEstado);
+                },
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
