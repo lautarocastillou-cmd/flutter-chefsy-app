@@ -1,0 +1,24 @@
+name: chefsy_cadete
+description: Portal móvil y servicio nativo de rastreo GPS en segundo plano para cadetes de Chefsy.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_background_service: ^5.0.6
+  geolocator: ^12.0.0
+  http: ^1.2.0
+  shared_preferences: ^2.2.3
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
