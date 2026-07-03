@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
-import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -49,10 +48,7 @@ void onStart(ServiceInstance service) async {
 
       // Obtener posición actual con alta precisión (GPS real)
       Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-        ),
+        desiredAccuracy: LocationAccuracy.high,
       );
 
       // Si la precisión es muy mala (> 45 metros), ignorar el salto
