@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -24,15 +25,16 @@ class ChefsyCadeteApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Chefsy Cadete',
+      title: 'Chefsy Cadetería',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE11D48),
-          brightness: Brightness.dark,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFE11D48),
+          surface: Color(0xFF1E293B),
         ),
-        scaffoldBackgroundColor: const Color(0xFF0B0F19),
-        useMaterial3: true,
+        fontFamily: 'Roboto',
       ),
       home: const PortalCadeteScreen(),
     );
@@ -54,6 +56,7 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
   bool _cargandoPedidos = false;
   bool _logueando = false;
   String _ultimaUbicacionTexto = 'Esperando señal GPS...';
+  Timer? _pollingTimer;
 
   final TextEditingController _usuarioCtrl = TextEditingController();
   final TextEditingController _claveCtrl = TextEditingController();
@@ -62,10 +65,12 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
   void initState() {
     super.initState();
     _cargarDatos();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 6), (_) => _fetchPedidosSilencioso());
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _usuarioCtrl.dispose();
     _claveCtrl.dispose();
     super.dispose();
@@ -260,6 +265,21 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     } catch (_) {
     } finally {
       if (mounted) setState(() => _cargandoPedidos = false);
+    }
+  }
+
+  Future<void> _fetchPedidosSilencioso() async {
+    if (_cadeteId == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('$_baseUrl/api/public/pedidos?cadeteId=$_cadeteId'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (res.statusCode == 200 && mounted) {
+        final data = jsonDecode(res.body);
+        setState(() => _pedidosListos = data['pedidos'] ?? []);
+      }
+    } catch (_) {
     }
   }
 

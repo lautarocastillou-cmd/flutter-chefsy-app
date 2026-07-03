@@ -21,7 +21,7 @@ void initForegroundTask() {
       playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(7000),
+      eventAction: ForegroundTaskEventAction.repeat(4000),
       autoRunOnBoot: false,
       allowWakeLock: true,
     ),
@@ -38,7 +38,6 @@ class GpsTaskHandler extends TaskHandler {
     try {
       _prefs = await SharedPreferences.getInstance();
     } catch (_) {
-      // Si falla prefs, el handler no enviará coords pero tampoco crasheará la app
     }
   }
 
@@ -58,11 +57,11 @@ class GpsTaskHandler extends TaskHandler {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        desiredAccuracy: LocationAccuracy.bestForNavigation,
+        timeLimit: const Duration(seconds: 4),
       );
 
-      if (position.accuracy > 50) return;
+      if (position.accuracy > 35) return;
 
       await http.post(
         Uri.parse(apiUrl),
@@ -78,9 +77,8 @@ class GpsTaskHandler extends TaskHandler {
           'speed': position.speed >= 0 ? position.speed : 0,
           'heading': position.heading >= 0 ? position.heading : 0,
         }),
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 4));
     } catch (_) {
-      // Silencioso: fallos de red o GPS sin señal no matan el servicio
     } finally {
       _ocupado = false;
     }
