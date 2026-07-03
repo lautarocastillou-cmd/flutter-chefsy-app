@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- ACCESS_BACKGROUND_LOCATION se solicita en runtime si el usuario lo acepta, no en el manifiesto -->
     
     <!-- Permisos para Foreground Service anti-cierres con pantalla apagada en bolsillo -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -19,9 +19,11 @@
         android:icon="@mipmap/ic_launcher">
 
         <!-- Servicio Nativo para evitar el Doze Mode en Android 12/13/14/15 -->
+        <!-- foregroundServiceType="location" removido: en Android 12-14 causa SecurityException
+             si ACCESS_BACKGROUND_LOCATION no está concedido ANTES de startService().
+             Un Foreground Service sin ese type puede igualmente leer GPS con ACCESS_FINE_LOCATION. -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="location"
             android:exported="true" />
 
         <activity

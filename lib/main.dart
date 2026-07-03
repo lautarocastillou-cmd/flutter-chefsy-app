@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
@@ -88,14 +88,12 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
     }
   }
 
-  // VerificaciÃ³n de permisos en dos pasos obligatorios:
-  // 1ro: Permiso en primer plano (ACCESS_FINE_LOCATION)
-  // 2do: Permiso en segundo plano (ACCESS_BACKGROUND_LOCATION)
-  // Android exige que se soliciten por SEPARADO y en ese orden.
+  // Solo necesitamos ACCESS_FINE_LOCATION (primer plano).
+  // El servicio puede leer GPS sin ACCESS_BACKGROUND_LOCATION
+  // porque removimos foregroundServiceType="location" del manifiesto.
   Future<bool> _verificarPermisosGps() async {
     LocationPermission permission = await Geolocator.checkPermission();
 
-    // Paso 1: Solicitar permiso de primer plano si no estÃ¡ dado
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) return false;
@@ -103,20 +101,9 @@ class _PortalCadeteScreenState extends State<PortalCadeteScreen> {
 
     if (permission == LocationPermission.deniedForever) return false;
 
-    // Causa #1 / Race Condition: Esperar que el diÃ¡logo de permisos del sistema
+    // Delay anti-race-condition: esperar que el diálogo de permisos del sistema
     // cierre completamente ANTES de iniciar el Foreground Service.
-    // Sin este delay, Android puede crashear al intentar arrancar el servicio
-    // mientras la Activity de permisos todavÃ­a estÃ¡ activa en el stack.
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    // Paso 2: En Android 10+, el permiso de segundo plano (bolsillo) es una
-    // pantalla SEPARADA en ConfiguraciÃ³n. Si todavÃ­a no lo tiene, abrimos esa pantalla.
-    if (permission == LocationPermission.whileInUse) {
-      permission = await Geolocator.requestPermission();
-      // Si sigue siendo "whileInUse", el usuario no aprobÃ³ el segundo plano.
-      // Igual dejamos iniciar el servicio pero funcionarÃ¡ solo con pantalla encendida.
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
+    await Future.delayed(const Duration(milliseconds: 600));
 
     return true;
   }
