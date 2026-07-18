@@ -225,16 +225,32 @@ class _PortalScreenState extends State<PortalScreen> {
       if (tel.startsWith('0')) tel = tel.substring(1);
       tel = '549$tel';
     }
-    final url = Uri.parse(
-        'https://wa.me/$tel?text=${Uri.encodeComponent("Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido!")}');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo abrir WhatsApp')),
-        );
+    final mensaje = "Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido!";
+    
+    final uris = [
+      Uri.parse('whatsapp://send?phone=$tel&text=${Uri.encodeComponent(mensaje)}'),
+      Uri.parse('https://wa.me/$tel?text=${Uri.encodeComponent(mensaje)}'),
+    ];
+
+    bool abierto = false;
+    for (final u in uris) {
+      try {
+        if (await launchUrl(u, mode: LaunchMode.externalApplication)) {
+          abierto = true;
+          break;
+        } else if (await launchUrl(u, mode: LaunchMode.platformDefault)) {
+          abierto = true;
+          break;
+        }
+      } catch (_) {
+        // Continuar intentando
       }
+    }
+
+    if (!abierto && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir WhatsApp en este dispositivo.')),
+      );
     }
   }
 
@@ -392,7 +408,81 @@ class _PortalScreenState extends State<PortalScreen> {
                   ),
                 ),
 
+              // Botón compacto de Rastreo en Bolsillo Activo (Superior y más chico)
+              GestureDetector(
+                onTap: _toggleRastreo,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: _estaRastreando
+                          ? [const Color(0xFF10B981), const Color(0xFF047857)]
+                          : [const Color(0xFFE11D48), const Color(0xFF9F1239)],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (_estaRastreando ? const Color(0xFF10B981) : const Color(0xFFE11D48)).withValues(alpha: 0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: Icon(
+                          _estaRastreando ? Icons.gps_fixed_rounded : Icons.play_circle_fill_rounded,
+                          key: ValueKey(_estaRastreando),
+                          size: 32,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _estaRastreando
+                                  ? (_simulacionActiva ? 'SIMULACIÓN GPS ACTIVA' : 'RASTREO EN BOLSILLO ACTIVO')
+                                  : 'INICIAR TURNO Y RASTREO',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _ultimaUbicacionTexto,
+                              style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.85), fontFamily: 'monospace'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _estaRastreando ? 'ON' : 'OFF',
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
               // Sesión activa info (Doble tap activa controles de simulación)
+
 
               GestureDetector(
                 onDoubleTap: () {
@@ -560,90 +650,8 @@ class _PortalScreenState extends State<PortalScreen> {
                 ),
               ],
 
-              // Botón principal de turno
-              GestureDetector(
-                onTap: _toggleRastreo,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeInOut,
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: _estaRastreando
-                          ? [const Color(0xFF10B981), const Color(0xFF047857)]
-                          : [const Color(0xFFE11D48), const Color(0xFF9F1239)],
-                    ),
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (_estaRastreando
-                                ? const Color(0xFF10B981)
-                                : const Color(0xFFE11D48))
-                            .withValues(alpha: 0.45),
-                        blurRadius: 24,
-                        offset: const Offset(0, 10),
-                      )
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        child: Icon(
-                          _estaRastreando
-                              ? Icons.gps_fixed_rounded
-                              : Icons.play_circle_fill_rounded,
-                          key: ValueKey(_estaRastreando),
-                          size: 48,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _estaRastreando
-                            ? (_simulacionActiva ? 'SIMULACIÓN GPS ACTIVA' : 'RASTREO EN BOLSILLO ACTIVO')
-                            : 'INICIAR TURNO Y RASTREO',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.2),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _estaRastreando
-                            ? 'Podés apagar la pantalla. El GPS sigue reportando.'
-                            : 'Toca para activar el rastreo en segundo plano',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 12),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          _ultimaUbicacionTexto,
-                          style: const TextStyle(
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              color: Colors.white70),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
+              // Botón grande de rastreo movido a la parte superior en formato compacto
+
 
               // Pedidos asignados
               Row(

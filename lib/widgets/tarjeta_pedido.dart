@@ -23,9 +23,11 @@ class TarjetaPedidoCadete extends StatelessWidget {
     }
     final cleanTel = tel.replaceAll(RegExp(r'\D'), '');
     final url = Uri.parse('tel:$cleanTel');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        await launchUrl(url, mode: LaunchMode.platformDefault);
+      }
+    } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo abrir la app de llamadas.')),
@@ -35,10 +37,13 @@ class TarjetaPedidoCadete extends StatelessWidget {
 
   void _abrirGoogleMaps(BuildContext context) async {
     final coords = pedido.coordenadas;
-    Uri url;
+    List<Uri> uris = [];
     if (coords != null && coords.latitud != 0.0) {
-      url = Uri.parse(
-          'https://www.google.com/maps/dir/?api=1&destination=${coords.latitud},${coords.longitud}');
+      uris = [
+        Uri.parse('google.navigation:q=${coords.latitud},${coords.longitud}'),
+        Uri.parse('geo:${coords.latitud},${coords.longitud}?q=${coords.latitud},${coords.longitud}'),
+        Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${coords.latitud},${coords.longitud}'),
+      ];
     } else {
       final dir = pedido.direccion;
       if (dir.isEmpty || dir == 'Retiro en local') {
@@ -47,15 +52,30 @@ class TarjetaPedidoCadete extends StatelessWidget {
         );
         return;
       }
-      url = Uri.parse(
-          'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(dir)}');
+      uris = [
+        Uri.parse('geo:0,0?q=${Uri.encodeComponent(dir)}'),
+        Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(dir)}'),
+      ];
     }
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (!context.mounted) return;
+
+    bool abierto = false;
+    for (final u in uris) {
+      try {
+        if (await launchUrl(u, mode: LaunchMode.externalApplication)) {
+          abierto = true;
+          break;
+        } else if (await launchUrl(u, mode: LaunchMode.platformDefault)) {
+          abierto = true;
+          break;
+        }
+      } catch (_) {
+        // Continuar intentando con el siguiente URI/modo
+      }
+    }
+
+    if (!abierto && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir Google Maps.')),
+        const SnackBar(content: Text('No se pudo abrir Google Maps en este dispositivo.')),
       );
     }
   }
