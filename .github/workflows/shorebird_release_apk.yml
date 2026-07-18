@@ -28,6 +28,11 @@ jobs:
         with:
           cache: true
 
+      - name: Get Dependencies
+        run: |
+          chmod +x android/gradlew
+          flutter pub get
+
       - name: Shorebird Init (Crear app en la nube si no existe)
         run: |
           if [ ! -f shorebird.yaml ]; then
