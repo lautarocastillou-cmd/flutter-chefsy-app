@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -41,6 +42,8 @@ class _PortalScreenState extends State<PortalScreen> {
   double _simLng = -68.8458;
   bool _modoAhorro = false;
   Timer? _joystickTimer;
+  String _vistaActiva = 'activos';
+  bool _alertasSonoras = true;
 
   SharedPreferences? _prefs;
 
@@ -76,6 +79,7 @@ class _PortalScreenState extends State<PortalScreen> {
       _estaRastreando = isRunning;
       _simulacionActiva = simActiva;
       _modoAhorro = prefs.getBool('modo_ahorro') ?? false;
+      _alertasSonoras = prefs.getBool('alertas_sonoras') ?? true;
       _simLat = simCoords['lat']!;
       _simLng = simCoords['lng']!;
       if (isRunning) {
@@ -99,6 +103,17 @@ class _PortalScreenState extends State<PortalScreen> {
           });
         }
       },
+    );
+  }
+
+  Future<void> _toggleAlertas() async {
+    final nuevo = !_alertasSonoras;
+    await _prefs?.setBool('alertas_sonoras', nuevo);
+    setState(() {
+      _alertasSonoras = nuevo;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(nuevo ? '🔔 Alertas de nuevos pedidos ACTIVADAS' : '🔕 Alertas de nuevos pedidos SILENCIADAS')),
     );
   }
 
@@ -238,6 +253,13 @@ class _PortalScreenState extends State<PortalScreen> {
   Future<void> _fetchPedidosSilencioso() async {
     final list = await _apiService.fetchPedidos(widget.cadeteId);
     if (mounted) {
+      if (_alertasSonoras) {
+        final oldActivos = _pedidosListos.where((p) => p.estado != 'entregado').length;
+        final newActivos = list.where((p) => p.estado != 'entregado').length;
+        if (newActivos > oldActivos) {
+          SystemSound.play(SystemSoundType.alert);
+        }
+      }
       setState(() {
         _pedidosListos = list;
       });
@@ -411,6 +433,10 @@ class _PortalScreenState extends State<PortalScreen> {
         ),
         backgroundColor: const Color(0xFF0F172A),
         actions: [
+          IconButton(
+            icon: Icon(_alertasSonoras ? Icons.notifications_active_rounded : Icons.notifications_off_rounded, color: _alertasSonoras ? Colors.amber : Colors.white54),
+            onPressed: _toggleAlertas,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _fetchPedidos,
@@ -802,7 +828,7 @@ class _PortalScreenState extends State<PortalScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('📦 PEDIDOS ASIGNADOS',
+                  const Text('📦 MIS PEDIDOS',
                       style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
@@ -816,37 +842,85 @@ class _PortalScreenState extends State<PortalScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              
+              // Tabs: Activos / Entregados
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _vistaActiva = 'activos'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _vistaActiva == 'activos' ? Colors.white : Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _vistaActiva == 'activos' ? Colors.black : Colors.transparent),
+                        ),
+                        child: Center(
+                          child: Text('Activos (${_pedidosListos.where((p) => p.estado != 'entregado').length})',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: _vistaActiva == 'activos' ? Colors.black : Colors.white70)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _vistaActiva = 'entregados'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _vistaActiva == 'entregados' ? Colors.white : Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _vistaActiva == 'entregados' ? Colors.black : Colors.transparent),
+                        ),
+                        child: Center(
+                          child: Text('Entregados (${_pedidosListos.where((p) => p.estado == 'entregado').length})',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: _vistaActiva == 'entregados' ? Colors.black : Colors.white70)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
 
               Expanded(
-                child: _pedidosListos.isEmpty
-                    ? Center(
+                child: Builder(
+                  builder: (context) {
+                    final filtrados = _pedidosListos.where((p) => _vistaActiva == 'activos' ? p.estado != 'entregado' : p.estado == 'entregado').toList();
+                    if (filtrados.isEmpty) {
+                      return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.inbox_rounded,
+                            Icon(_vistaActiva == 'activos' ? Icons.inbox_rounded : Icons.check_circle_outline_rounded,
                                 size: 54,
                                 color: Colors.white.withValues(alpha: 0.15)),
                             const SizedBox(height: 12),
-                            const Text(
-                              '🎉 Sin entregas pendientes ahora.',
+                            Text(
+                              _vistaActiva == 'activos' ? 'No tenés pedidos activos en este momento.' : 'Aún no tenés pedidos entregados hoy.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: const TextStyle(
                                   color: Colors.white54, fontSize: 14),
                             ),
                           ],
                         ),
-                      )
-                    : ListView.builder(
-                        itemCount: _pedidosListos.length,
+                      );
+                    }
+                    return ListView.builder(
+                        itemCount: filtrados.length,
                         itemBuilder: (context, idx) {
-                          final p = _pedidosListos[idx];
+                          final p = filtrados[idx];
                           return TarjetaPedidoCadete(
                             pedido: p,
                             onAbrirWhatsApp: _abrirWhatsApp,
                             onCambiarEstado: _cambiarEstadoPedido,
                           );
                         },
-                      ),
+                      );
+                  }
+                )
               ),
             ],
           ),
