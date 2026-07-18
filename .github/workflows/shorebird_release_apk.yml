@@ -23,12 +23,13 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Install Shorebird
-        run: curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+      - name: Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
 
       - name: Shorebird Init (Crear app en la nube si no existe)
         run: |
-          export PATH="$HOME/.shorebird/bin:$PATH"
           if [ ! -f shorebird.yaml ]; then
             shorebird init --force
             git config --global user.name "github-actions[bot]"
@@ -42,7 +43,6 @@ jobs:
 
       - name: Compilar APK Base con Shorebird
         run: |
-          export PATH="$HOME/.shorebird/bin:$PATH"
           shorebird release android --force
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
