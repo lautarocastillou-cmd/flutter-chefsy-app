@@ -174,7 +174,26 @@ class _PortalScreenState extends State<PortalScreen> {
 
   void _toggleRastreo() {
     if (_estaRastreando) {
-      _detenerRastreo();
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('¿Detener rastreo?'),
+          content: const Text('¿Estás seguro de que querés dejar de compartir tu ubicación?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _detenerRastreo();
+              },
+              child: const Text('Detener'),
+            ),
+          ],
+        ),
+      );
     } else {
       _iniciarRastreo();
     }
