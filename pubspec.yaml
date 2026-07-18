@@ -1,7 +1,7 @@
 name: chefsy_cadete
 description: Portal móvil y servicio nativo de rastreo GPS en segundo plano para cadetes de Chefsy.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
