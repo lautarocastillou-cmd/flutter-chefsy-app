@@ -40,6 +40,6 @@ jobs:
           flutter pub get
 
       - name: Enviar Parche con Shorebird
-        run: shorebird patch android --artifact apk
+        run: shorebird patch android
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
