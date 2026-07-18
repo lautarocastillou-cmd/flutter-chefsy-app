@@ -44,11 +44,13 @@ class GpsTaskHandler extends TaskHandler {
       _simulacionActiva = _prefs?.getBool('simulacion_activa') ?? false;
 
       if (!_simulacionActiva) {
+        final modoAhorro = _prefs?.getBool('modo_ahorro') ?? false;
+        
         // --- MODO REAL: Suscripción reactiva al stream del GPS ---
         final positionStream = Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high, // Consumo optimizado (no bestForNavigation)
-            distanceFilter: 10,             // Notificar si se desplaza al menos 10 metros
+          locationSettings: LocationSettings(
+            accuracy: modoAhorro ? LocationAccuracy.balanced : LocationAccuracy.high,
+            distanceFilter: modoAhorro ? 50 : 10,
           ),
         );
 

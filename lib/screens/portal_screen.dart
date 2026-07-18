@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../widgets/tarjeta_pedido.dart';
 import '../background_service.dart';
 import '../services/updater_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PortalScreen extends StatefulWidget {
   final String cadeteId;
@@ -36,6 +37,7 @@ class _PortalScreenState extends State<PortalScreen> {
   bool _simulacionActiva = false;
   double _simLat = -32.8894;
   double _simLng = -68.8458;
+  bool _modoAhorro = false;
 
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
@@ -61,10 +63,12 @@ class _PortalScreenState extends State<PortalScreen> {
     final isRunning = await FlutterForegroundTask.isRunningService;
     final simActiva = await _authService.isSimulacionActiva();
     final simCoords = await _authService.obtenerSimCoordenadas();
+    final prefs = await SharedPreferences.getInstance();
 
     setState(() {
       _estaRastreando = isRunning;
       _simulacionActiva = simActiva;
+      _modoAhorro = prefs.getBool('modo_ahorro') ?? false;
       _simLat = simCoords['lat']!;
       _simLng = simCoords['lng']!;
       if (isRunning) {
@@ -497,6 +501,68 @@ class _PortalScreenState extends State<PortalScreen> {
                       ),
                     ],
                   ),
+                ),
+              ),
+
+              // Toggle de Modo Ahorro
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _modoAhorro ? Icons.battery_saver : Icons.battery_full,
+                      color: _modoAhorro ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Modo Ahorro de Energía',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          Text(
+                            _modoAhorro ? 'GPS optimizado. Se actualiza cada 50m.' : 'GPS preciso. Se actualiza cada 10m.',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _modoAhorro,
+                      activeColor: const Color(0xFFF59E0B),
+                      onChanged: (val) async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('modo_ahorro', val);
+                        setState(() {
+                          _modoAhorro = val;
+                        });
+                        
+                        // Si está rastreando, mostramos aviso de que aplique reiniciando
+                        if (_estaRastreando && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Apagá y prendé el rastreo para aplicar el cambio de batería.'),
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
 
