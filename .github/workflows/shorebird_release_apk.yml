@@ -54,7 +54,7 @@ jobs:
 
       - name: Compilar APK Base con Shorebird
         run: |
-          shorebird release android --force
+          shorebird release android --artifact apk
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
 
