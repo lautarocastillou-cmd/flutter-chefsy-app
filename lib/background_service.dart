@@ -37,6 +37,10 @@ class GpsTaskHandler extends TaskHandler {
   DateTime? _ultimoReporteTime;
   bool _simulacionActiva = false;
 
+  // Variables en memoria para joystick en tiempo real
+  double? _liveSimLat;
+  double? _liveSimLng;
+
   // --- Lógica de Auto-Pausa en el local ---
   // Modo pausa: el cadete no se movió, dejamos de reportar al servidor.
   bool _enModoPausa = false;
@@ -142,6 +146,19 @@ class GpsTaskHandler extends TaskHandler {
   }
 
   @override
+  void onReceiveData(Object data) {
+    if (data is String) {
+      try {
+        final mapa = jsonDecode(data);
+        if (mapa['sim_lat'] != null && mapa['sim_lng'] != null) {
+          _liveSimLat = (mapa['sim_lat'] as num).toDouble();
+          _liveSimLng = (mapa['sim_lng'] as num).toDouble();
+        }
+      } catch (_) {}
+    }
+  }
+
+  @override
   void onRepeatEvent(DateTime timestamp) async {
     if (_ocupado) return;
 
@@ -154,8 +171,8 @@ class GpsTaskHandler extends TaskHandler {
         final cadeteId = _prefs?.getString('cadete_id');
         if (cadeteId == null || cadeteId.isEmpty) return;
 
-        final double lat = _prefs?.getDouble('sim_lat') ?? -32.8894;
-        final double lng = _prefs?.getDouble('sim_lng') ?? -68.8458;
+        final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -32.8894;
+        final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -68.8458;
 
         await http.post(
           Uri.parse(apiUrl),

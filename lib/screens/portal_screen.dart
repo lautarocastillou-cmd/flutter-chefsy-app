@@ -40,6 +40,7 @@ class _PortalScreenState extends State<PortalScreen> {
   double _simLat = -32.8894;
   double _simLng = -68.8458;
   bool _modoAhorro = false;
+  Timer? _joystickTimer;
 
   SharedPreferences? _prefs;
 
@@ -60,6 +61,7 @@ class _PortalScreenState extends State<PortalScreen> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _joystickTimer?.cancel();
     super.dispose();
   }
 
@@ -319,8 +321,14 @@ class _PortalScreenState extends State<PortalScreen> {
       }
     });
 
-    // Actualizar notificación del foreground task con la ubicación mock
     if (_estaRastreando && _simulacionActiva) {
+      // 1. Enviar los datos instantáneamente al hilo de fondo en memoria
+      FlutterForegroundTask.sendDataToTask(jsonEncode({
+        'sim_lat': lat,
+        'sim_lng': lng,
+      }));
+
+      // 2. Actualizar notificación (opcional visualmente)
       await FlutterForegroundTask.updateService(
         notificationTitle: '🛠️ Chefsy GPS (SIMULADO)',
         notificationText: 'Simulación activa: [${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}]',
@@ -330,6 +338,19 @@ class _PortalScreenState extends State<PortalScreen> {
 
   void _moverSimulador(double deltaLat, double deltaLng) {
     _actualizarSimCoords(_simLat + deltaLat, _simLng + deltaLng);
+  }
+
+  void _iniciarMovimiento(double deltaLat, double deltaLng) {
+    _moverSimulador(deltaLat, deltaLng);
+    _joystickTimer?.cancel();
+    _joystickTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+      _moverSimulador(deltaLat, deltaLng);
+    });
+  }
+
+  void _detenerMovimiento() {
+    _joystickTimer?.cancel();
+    _joystickTimer = null;
   }
 
   void _teletransportarLocal() {
@@ -723,27 +744,47 @@ class _PortalScreenState extends State<PortalScreen> {
                         Center(
                           child: Column(
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.arrow_upward_rounded, size: 28, color: Colors.white),
-                                onPressed: () => _moverSimulador(0.00015, 0.0), // Norte
+                              GestureDetector(
+                                onPanDown: (_) => _iniciarMovimiento(0.00015, 0.0), // Norte
+                                onPanEnd: (_) => _detenerMovimiento(),
+                                onPanCancel: _detenerMovimiento,
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Icon(Icons.arrow_upward_rounded, size: 36, color: Colors.white),
+                                ),
                               ),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.arrow_back_rounded, size: 28, color: Colors.white),
-                                    onPressed: () => _moverSimulador(0.0, -0.00015), // Oeste
+                                  GestureDetector(
+                                    onPanDown: (_) => _iniciarMovimiento(0.0, -0.00015), // Oeste
+                                    onPanEnd: (_) => _detenerMovimiento(),
+                                    onPanCancel: _detenerMovimiento,
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Icon(Icons.arrow_back_rounded, size: 36, color: Colors.white),
+                                    ),
                                   ),
-                                  const SizedBox(width: 40, child: Icon(Icons.navigation, color: Colors.blueAccent, size: 20)),
-                                  IconButton(
-                                    icon: const Icon(Icons.arrow_forward_rounded, size: 28, color: Colors.white),
-                                    onPressed: () => _moverSimulador(0.0, 0.00015), // Este
+                                  const SizedBox(width: 40, child: Icon(Icons.navigation, color: Colors.blueAccent, size: 24)),
+                                  GestureDetector(
+                                    onPanDown: (_) => _iniciarMovimiento(0.0, 0.00015), // Este
+                                    onPanEnd: (_) => _detenerMovimiento(),
+                                    onPanCancel: _detenerMovimiento,
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Icon(Icons.arrow_forward_rounded, size: 36, color: Colors.white),
+                                    ),
                                   ),
                                 ],
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.arrow_downward_rounded, size: 28, color: Colors.white),
-                                onPressed: () => _moverSimulador(-0.00015, 0.0), // Sur
+                              GestureDetector(
+                                onPanDown: (_) => _iniciarMovimiento(-0.00015, 0.0), // Sur
+                                onPanEnd: (_) => _detenerMovimiento(),
+                                onPanCancel: _detenerMovimiento,
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Icon(Icons.arrow_downward_rounded, size: 36, color: Colors.white),
+                                ),
                               ),
                             ],
                           ),
