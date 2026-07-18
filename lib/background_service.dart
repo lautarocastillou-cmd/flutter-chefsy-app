@@ -61,7 +61,7 @@ class GpsTaskHandler extends TaskHandler {
 
         final positionStream = Geolocator.getPositionStream(
           locationSettings: LocationSettings(
-            accuracy: modoAhorro ? LocationAccuracy.balanced : LocationAccuracy.high,
+            accuracy: modoAhorro ? LocationAccuracy.low : LocationAccuracy.high,
             distanceFilter: modoAhorro ? 50 : 10,
           ),
         );
