@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -39,6 +41,8 @@ class _PortalScreenState extends State<PortalScreen> {
   double _simLng = -68.8458;
   bool _modoAhorro = false;
 
+  SharedPreferences? _prefs;
+
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
   final UpdaterService _updaterService = UpdaterService();
@@ -64,6 +68,7 @@ class _PortalScreenState extends State<PortalScreen> {
     final simActiva = await _authService.isSimulacionActiva();
     final simCoords = await _authService.obtenerSimCoordenadas();
     final prefs = await SharedPreferences.getInstance();
+    _prefs = prefs;
 
     setState(() {
       _estaRastreando = isRunning;
@@ -167,6 +172,20 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   Future<void> _detenerRastreo() async {
+    // Notificar al servidor que el GPS fue apagado intencionalmente
+    final cadeteId = _prefs?.getString('cadete_id') ?? '';
+    if (cadeteId.isNotEmpty) {
+      try {
+        await http.post(
+          Uri.parse('https://chefsy.xyz/api/public/ubicacion'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
+          },
+          body: jsonEncode({'cadeteId': cadeteId, 'gps_activo': false}),
+        ).timeout(const Duration(seconds: 4));
+      } catch (_) {}
+    }
     await FlutterForegroundTask.stopService();
     if (mounted) {
       setState(() {

@@ -22,7 +22,7 @@ void initForegroundTask() {
       playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(4000), // Bucle de 4s para reportar simulación y checkouts
+      eventAction: ForegroundTaskEventAction.repeat(4000),
       autoRunOnBoot: false,
       allowWakeLock: true,
     ),
@@ -37,6 +37,19 @@ class GpsTaskHandler extends TaskHandler {
   DateTime? _ultimoReporteTime;
   bool _simulacionActiva = false;
 
+  // --- Lógica de Auto-Pausa en el local ---
+  // Modo pausa: el cadete no se movió, dejamos de reportar al servidor.
+  bool _enModoPausa = false;
+  // Punto donde detectamos que se detuvo.
+  Position? _posicionDetencion;
+  // Marca de tiempo desde cuando está quieto.
+  DateTime? _tiempoDetenido;
+
+  // Umbrales de comportamiento
+  static const double _metrosParaPausarRastreo = 30.0;   // Si se mueve menos de esto → considera que está quieto
+  static const double _metrosParaReanudarRastreo = 80.0;  // Si se aleja más de esto del punto de pausa → reanuda
+  static const Duration _tiempoSinMovimientoParaPausar = Duration(minutes: 3); // Tiempo quieto antes de pausar
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     try {
@@ -45,8 +58,7 @@ class GpsTaskHandler extends TaskHandler {
 
       if (!_simulacionActiva) {
         final modoAhorro = _prefs?.getBool('modo_ahorro') ?? false;
-        
-        // --- MODO REAL: Suscripción reactiva al stream del GPS ---
+
         final positionStream = Geolocator.getPositionStream(
           locationSettings: LocationSettings(
             accuracy: modoAhorro ? LocationAccuracy.balanced : LocationAccuracy.high,
@@ -56,7 +68,7 @@ class GpsTaskHandler extends TaskHandler {
 
         _positionStreamSub = positionStream.listen(
           (Position position) {
-            _enviarUbicacionReal(position);
+            _procesarPosicion(position);
           },
           onError: (_) {},
         );
@@ -64,12 +76,76 @@ class GpsTaskHandler extends TaskHandler {
     } catch (_) {}
   }
 
+  /// Evalúa la posición recibida y decide si reportarla o pausar.
+  void _procesarPosicion(Position position) {
+    // Si estamos en modo pausa, verificar si el cadete se alejó suficiente para reanudar
+    if (_enModoPausa) {
+      if (_posicionDetencion != null) {
+        final distanciaDesdeDetencion = Geolocator.distanceBetween(
+          _posicionDetencion!.latitude,
+          _posicionDetencion!.longitude,
+          position.latitude,
+          position.longitude,
+        );
+
+        if (distanciaDesdeDetencion >= _metrosParaReanudarRastreo) {
+          // ¡El cadete se movió! Reanudamos el rastreo
+          _enModoPausa = false;
+          _posicionDetencion = null;
+          _tiempoDetenido = null;
+          FlutterForegroundTask.updateService(
+            notificationTitle: '🛵 Chefsy Cadetería',
+            notificationText: 'GPS activo. Transmitiendo ubicación.',
+          );
+          _enviarUbicacionReal(position);
+        }
+        // Si no se alejó suficiente, seguimos en pausa (no reportamos)
+      }
+      return;
+    }
+
+    // --- Modo activo: evaluar si el cadete está quieto ---
+    if (_posicionDetencion != null) {
+      final distanciaActual = Geolocator.distanceBetween(
+        _posicionDetencion!.latitude,
+        _posicionDetencion!.longitude,
+        position.latitude,
+        position.longitude,
+      );
+
+      if (distanciaActual < _metrosParaPausarRastreo) {
+        // Sigue en el mismo lugar, actualizar tiempo
+        _tiempoDetenido ??= DateTime.now();
+        final tiempoQuieto = DateTime.now().difference(_tiempoDetenido!);
+
+        if (tiempoQuieto >= _tiempoSinMovimientoParaPausar) {
+          // Lleva 3+ minutos quieto → pausar reportes
+          _enModoPausa = true;
+          FlutterForegroundTask.updateService(
+            notificationTitle: '🛵 Chefsy — En espera',
+            notificationText: 'GPS pausado. Se reanudará al moverte.',
+          );
+          return;
+        }
+      } else {
+        // Se movió, resetear el contador
+        _posicionDetencion = position;
+        _tiempoDetenido = null;
+      }
+    } else {
+      // Primera posición recibida
+      _posicionDetencion = position;
+    }
+
+    // Reportar normalmente
+    _enviarUbicacionReal(position);
+  }
+
   @override
   void onRepeatEvent(DateTime timestamp) async {
     if (_ocupado) return;
 
     try {
-      // Recargar preferencias por si cambia el estado dinámicamente
       final simActiva = _prefs?.getBool('simulacion_activa') ?? false;
       
       if (simActiva) {
@@ -81,7 +157,6 @@ class GpsTaskHandler extends TaskHandler {
         final double lat = _prefs?.getDouble('sim_lat') ?? -32.8894;
         final double lng = _prefs?.getDouble('sim_lng') ?? -68.8458;
 
-        // Transmitir ubicación simulada
         await http.post(
           Uri.parse(apiUrl),
           headers: {
@@ -92,9 +167,9 @@ class GpsTaskHandler extends TaskHandler {
             'cadeteId': cadeteId,
             'lat': lat,
             'lng': lng,
-            'accuracy': 5.0, // Alta precisión simulada
-            'speed': 25.0,   // Velocidad simulada de moto
-            'heading': 90.0, // Dirección simulada (Este)
+            'accuracy': 5.0,
+            'speed': 25.0,
+            'heading': 90.0,
           }),
         ).timeout(const Duration(seconds: 4));
       }
@@ -106,7 +181,6 @@ class GpsTaskHandler extends TaskHandler {
 
   void _enviarUbicacionReal(Position position) async {
     final ahora = DateTime.now();
-    // Throttling: máximo un reporte cada 4 segundos para evitar spam al servidor
     if (_ultimoReporteTime != null &&
         ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 4)) {
       return;
@@ -120,7 +194,6 @@ class GpsTaskHandler extends TaskHandler {
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 
-      // Filtrado estricto de drifts
       if (position.accuracy > 35) return;
 
       await http.post(
