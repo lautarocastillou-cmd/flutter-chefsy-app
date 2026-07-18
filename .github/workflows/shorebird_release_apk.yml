@@ -1,0 +1,54 @@
+name: Shorebird Base Release (APK)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release-android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Shorebird
+        run: curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+
+      - name: Shorebird Init (Crear app en la nube si no existe)
+        run: |
+          export PATH="$HOME/.shorebird/bin:$PATH"
+          if [ ! -f shorebird.yaml ]; then
+            shorebird init --force
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add shorebird.yaml
+            git commit -m "chore: auto-generate shorebird.yaml via CI"
+            git push
+          fi
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+
+      - name: Compilar APK Base con Shorebird
+        run: |
+          export PATH="$HOME/.shorebird/bin:$PATH"
+          shorebird release android --force
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+
+      - name: Subir APK para Descargar
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-base-shorebird
+          path: build/app/outputs/apk/release/app-release.apk
