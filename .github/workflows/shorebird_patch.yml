@@ -1,0 +1,59 @@
+name: Shorebird Auto-Patch Android
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'assets/**'
+  workflow_dispatch: # Permite ejecutar el workflow manualmente con un clic en GitHub Actions
+
+jobs:
+  patch-android:
+    name: 🚀 Deploy Shorebird Patch (Android)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonar Repositorio
+        uses: actions/checkout@v4
+
+      - name: ☕ Configurar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🐦 Instalación de Shorebird CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh | bash
+          echo "$HOME/.shorebird/bin" >> $GITHUB_PATH
+
+      - name: 🔑 Verificar Configuración de Shorebird
+        id: verify_shorebird
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          echo "Verificando shorebird.yaml en el repositorio..."
+          if [ ! -f "shorebird.yaml" ]; then
+            echo "⚠️ ADVERTENCIA: No se encontró el archivo 'shorebird.yaml' en la raíz del proyecto."
+            echo "👉 Para inicializar Shorebird en tu proyecto por primera vez, ejecuta en tu terminal local: 'shorebird init' y sube el archivo shorebird.yaml."
+            echo "ready=false" >> $GITHUB_OUTPUT
+          elif [ -z "$SHOREBIRD_TOKEN" ]; then
+            echo "⚠️ ADVERTENCIA: No se encontró el secreto 'SHOREBIRD_TOKEN' en GitHub Repository Secrets."
+            echo "👉 Para obtener tu token, ejecuta localmente 'shorebird token', copia la clave que empieza con 'sb-' y agrégala en GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret -> SHOREBIRD_TOKEN."
+            echo "ready=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Configuración y Token de Shorebird verificados correctamente."
+            echo "ready=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: ⚡ Compilar y Publicar Parche al Vuelo (Shorebird Patch)
+        if: steps.verify_shorebird.outputs.ready == 'true'
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          echo "Ejecutando actualización al vuelo con Shorebird..."
+          shorebird patch android --force
+          echo "✅ ¡Actualización publicada con éxito! Los teléfonos de los cadetes se actualizarán automáticamente."
