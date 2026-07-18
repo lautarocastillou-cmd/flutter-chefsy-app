@@ -28,6 +28,12 @@ jobs:
         with:
           cache: true
 
+      - name: Generate local.properties for Android SDK
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" >> android/local.properties
+          cat android/local.properties
+
       - name: Get Dependencies
         run: |
           chmod +x android/gradlew
@@ -56,4 +62,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-release-base-shorebird
-          path: build/app/outputs/apk/release/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
