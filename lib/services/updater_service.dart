@@ -7,41 +7,31 @@ import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'api_service.dart';
 
 class UpdaterService {
-  final ShorebirdCodePush _shorebirdCodePush = ShorebirdCodePush();
+  final ShorebirdUpdater _shorebirdUpdater = ShorebirdUpdater();
 
   /// Verifica automáticamente si hay parches de Shorebird o nuevas versiones de APK disponibles.
   /// Llama a [onStatus] con un mensaje descriptivo y un booleano indicando si está listo para reiniciar.
   Future<void> verificarYDescargarActualizaciones({
     required Function(String mensaje, bool listoParaReiniciar) onStatus,
   }) async {
-    // 1. Verificación en vivo mediante Shorebird (Code Push)
+    // 1. Verificación en vivo mediante Shorebird (Code Push v2)
     try {
-      final isShorebird = _shorebirdCodePush.isShorebirdAvailable();
-      if (isShorebird) {
-        final patchNumber = await _shorebirdCodePush.currentPatchNumber();
-        debugPrint('[Shorebird] Parche actual: ${patchNumber ?? "ninguno (APK base)"}');
+      if (_shorebirdUpdater.isAvailable) {
+        final currentPatch = await _shorebirdUpdater.readCurrentPatch();
+        debugPrint('[Shorebird] Parche actual: ${currentPatch?.number ?? "ninguno (APK base)"}');
 
-        // Comprobamos si ya hay un parche descargado listo para instalarse al reiniciar
-        final readyToInstall = await _shorebirdCodePush.isNewPatchReadyToInstall();
-        if (readyToInstall) {
+        final status = await _shorebirdUpdater.checkForUpdate();
+        if (status == UpdateStatus.restartRequired) {
           onStatus('⚡ Actualización lista. Reiniciá la app para aplicar la nueva versión.', true);
           return;
-        }
-
-        // Comprobamos si hay un parche nuevo en la nube disponible para descargar
-        final isUpdateAvailable = await _shorebirdCodePush.isNewPatchAvailableForDownload();
-        if (isUpdateAvailable) {
+        } else if (status == UpdateStatus.outdated) {
           onStatus('📥 Descargando mejoras en segundo plano...', false);
-          await _shorebirdCodePush.downloadUpdateIfAvailable();
-          
-          final ahoraListo = await _shorebirdCodePush.isNewPatchReadyToInstall();
-          if (ahoraListo) {
-            onStatus('✅ ¡Listo! Nueva versión descargada. Reiniciá la app para activarla.', true);
-          }
+          await _shorebirdUpdater.update();
+          onStatus('✅ ¡Listo! Nueva versión descargada. Reiniciá la app para activarla.', true);
           return;
         }
       } else {
-        debugPrint('[Shorebird] No está activo (ejecutando en modo normal / no-shorebird).');
+        debugPrint('[Shorebird] No está activo en este entorno de compilación.');
       }
     } catch (e) {
       debugPrint('[Shorebird] Error al verificar actualizaciones: $e');
