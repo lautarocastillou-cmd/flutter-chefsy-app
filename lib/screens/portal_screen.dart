@@ -7,6 +7,7 @@ import '../models/pedido_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/tarjeta_pedido.dart';
+import '../background_service.dart';
 
 class PortalScreen extends StatefulWidget {
   final String cadeteId;
@@ -414,7 +415,7 @@ class _PortalScreenState extends State<PortalScreen> {
                           Switch(
                             value: _simulacionActiva,
                             onChanged: _toggleSimulacion,
-                            activeColor: Colors.blueAccent,
+                            activeThumbColor: Colors.blueAccent,
                           ),
                         ],
                       ),
@@ -632,10 +633,4 @@ class _PortalScreenState extends State<PortalScreen> {
       ),
     );
   }
-}
-
-// Entry point del handler — requerido por WithForegroundTask en esta pantalla
-@pragma('vm:entry-point')
-void startCallback() {
-  FlutterForegroundTask.setTaskHandler(GpsTaskHandler());
 }
