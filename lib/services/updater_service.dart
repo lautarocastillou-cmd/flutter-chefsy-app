@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
-import 'api_service.dart';
 
 class UpdaterService {
   final ShorebirdUpdater _shorebirdUpdater = ShorebirdUpdater();
