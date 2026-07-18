@@ -8,6 +8,7 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/tarjeta_pedido.dart';
 import '../background_service.dart';
+import '../services/updater_service.dart';
 
 class PortalScreen extends StatefulWidget {
   final String cadeteId;
@@ -38,6 +39,10 @@ class _PortalScreenState extends State<PortalScreen> {
 
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
+  final UpdaterService _updaterService = UpdaterService();
+
+  String? _mensajeActualizacion;
+  bool _listoParaReiniciar = false;
 
   @override
   void initState() {
@@ -70,6 +75,20 @@ class _PortalScreenState extends State<PortalScreen> {
     });
 
     _fetchPedidos();
+    _verificarActualizaciones();
+  }
+
+  Future<void> _verificarActualizaciones() async {
+    await _updaterService.verificarYDescargarActualizaciones(
+      onStatus: (mensaje, listo) {
+        if (mounted) {
+          setState(() {
+            _mensajeActualizacion = mensaje;
+            _listoParaReiniciar = listo;
+          });
+        }
+      },
+    );
   }
 
   Future<void> _cerrarSesion() async {
@@ -325,7 +344,56 @@ class _PortalScreenState extends State<PortalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Banner de Actualización Shorebird / OTA
+              if (_mensajeActualizacion != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _listoParaReiniciar ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (_listoParaReiniciar ? const Color(0xFF10B981) : const Color(0xFF3B82F6)).withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _listoParaReiniciar ? Icons.system_update_rounded : Icons.cloud_download_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _mensajeActualizacion!.split('|').first,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                      if (_listoParaReiniciar)
+                        ElevatedButton(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Reiniciá la app para activar el nuevo código.')),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF10B981),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          child: const Text('Aplicar', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                        ),
+                    ],
+                  ),
+                ),
+
               // Sesión activa info (Doble tap activa controles de simulación)
+
               GestureDetector(
                 onDoubleTap: () {
                   setState(() {
