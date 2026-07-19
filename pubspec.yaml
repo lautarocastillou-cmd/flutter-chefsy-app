@@ -7,6 +7,7 @@ environment:
   sdk: '>=3.2.0 <4.0.0'
 
 dependencies:
+  battery_plus: ^7.1.1
   flutter:
     sdk: flutter
   flutter_foreground_task: ^8.16.0
