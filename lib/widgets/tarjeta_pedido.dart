@@ -438,7 +438,9 @@ class TarjetaPedidoCadete extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: pedido.estado == 'en_cocina'
                       ? const Color(0xFF10B981)
-                      : const Color(0xFFE11D48),
+                      : pedido.estado == 'listo'
+                          ? const Color(0xFF3B82F6)
+                          : const Color(0xFFE11D48),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16)),
@@ -447,13 +449,17 @@ class TarjetaPedidoCadete extends StatelessWidget {
                 icon: Icon(
                   pedido.estado == 'en_cocina'
                       ? Icons.check_circle_outline_rounded
-                      : Icons.delivery_dining_rounded,
+                      : pedido.estado == 'listo'
+                          ? Icons.motorcycle_rounded
+                          : Icons.delivery_dining_rounded,
                   size: 20,
                 ),
                 label: Text(
                   pedido.estado == 'en_cocina'
                       ? 'MARCAR COMO LISTO'
-                      : 'MARCAR COMO ENTREGADO',
+                      : pedido.estado == 'listo'
+                          ? 'COMENZAR VIAJE'
+                          : 'MARCAR COMO ENTREGADO',
                   style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w900,
@@ -461,7 +467,8 @@ class TarjetaPedidoCadete extends StatelessWidget {
                 ),
                 onPressed: () {
                   final nuevoEstado =
-                      pedido.estado == 'en_cocina' ? 'listo' : 'entregado';
+                      pedido.estado == 'en_cocina' ? 'listo' : 
+                      pedido.estado == 'listo' ? 'en_camino' : 'entregado';
                   onCambiarEstado(pedido.id, nuevoEstado);
                 },
               ),
