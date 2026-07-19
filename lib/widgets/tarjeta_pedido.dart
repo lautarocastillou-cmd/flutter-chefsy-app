@@ -449,9 +449,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
                 icon: Icon(
                   pedido.estado == 'en_cocina'
                       ? Icons.check_circle_outline_rounded
-                      : pedido.estado == 'listo'
-                          ? Icons.motorcycle_rounded
-                          : Icons.delivery_dining_rounded,
+                      : Icons.delivery_dining_rounded,
                   size: 20,
                 ),
                 label: Text(

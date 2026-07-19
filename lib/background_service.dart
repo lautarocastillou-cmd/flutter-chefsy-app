@@ -4,7 +4,6 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:battery_plus/battery_plus.dart';
 
 const String apiUrl = 'https://chefsy.xyz/api/public/ubicacion';
 const String secretToken = 'chefsy_expo_secure_track_99XQ';
@@ -214,11 +213,6 @@ class GpsTaskHandler extends TaskHandler {
 
       if (position.accuracy > 35) return;
 
-      int? batteryLevel;
-      try {
-        batteryLevel = await Battery().batteryLevel;
-      } catch (_) {}
-
       await http.post(
         Uri.parse(apiUrl),
         headers: {
@@ -232,7 +226,6 @@ class GpsTaskHandler extends TaskHandler {
           'accuracy': position.accuracy,
           'speed': position.speed >= 0 ? position.speed : 0,
           'heading': position.heading >= 0 ? position.heading : 0,
-          if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 4));
     } catch (_) {
