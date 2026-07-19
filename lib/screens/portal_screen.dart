@@ -444,11 +444,12 @@ class _PortalScreenState extends State<PortalScreen> {
         ],
       ),
       body: WithForegroundTask(
-        child: Padding(
-          padding: const EdgeInsets.all(18.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // Banner de Actualización Shorebird / OTA
               if (_mensajeActualizacion != null)
                 Container(
@@ -575,11 +576,12 @@ class _PortalScreenState extends State<PortalScreen> {
                 margin: const EdgeInsets.only(bottom: 14),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -598,11 +600,11 @@ class _PortalScreenState extends State<PortalScreen> {
                         children: [
                           const Text(
                             'Modo Ahorro de Energía',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
                           ),
                           Text(
                             _modoAhorro ? 'GPS optimizado. Se actualiza cada 50m.' : 'GPS preciso. Se actualiza cada 10m.',
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 11, color: Colors.white70),
                           ),
                         ],
                       ),
@@ -885,12 +887,13 @@ class _PortalScreenState extends State<PortalScreen> {
               ),
               const SizedBox(height: 12),
 
-              Expanded(
-                child: Builder(
-                  builder: (context) {
-                    final filtrados = _pedidosListos.where((p) => _vistaActiva == 'activos' ? p.estado != 'entregado' : p.estado == 'entregado').toList();
-                    if (filtrados.isEmpty) {
-                      return Center(
+              Builder(
+                builder: (context) {
+                  final filtrados = _pedidosListos.where((p) => _vistaActiva == 'activos' ? p.estado != 'entregado' : p.estado == 'entregado').toList();
+                  if (filtrados.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 40.0),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -906,21 +909,23 @@ class _PortalScreenState extends State<PortalScreen> {
                             ),
                           ],
                         ),
-                      );
-                    }
-                    return ListView.builder(
-                        itemCount: filtrados.length,
-                        itemBuilder: (context, idx) {
-                          final p = filtrados[idx];
-                          return TarjetaPedidoCadete(
-                            pedido: p,
-                            onAbrirWhatsApp: _abrirWhatsApp,
-                            onCambiarEstado: _cambiarEstadoPedido,
-                          );
-                        },
-                      );
+                      ),
+                    );
                   }
-                )
+                  return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filtrados.length,
+                      itemBuilder: (context, idx) {
+                        final p = filtrados[idx];
+                        return TarjetaPedidoCadete(
+                          pedido: p,
+                          onAbrirWhatsApp: _abrirWhatsApp,
+                          onCambiarEstado: _cambiarEstadoPedido,
+                        );
+                      },
+                    );
+                }
               ),
             ],
           ),
