@@ -58,7 +58,8 @@ class _PortalScreenState extends State<PortalScreen> {
   void initState() {
     super.initState();
     _cargarDatos();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 6), (_) => _fetchPedidosSilencioso());
+    _pollingTimer = Timer.periodic(
+        const Duration(seconds: 6), (_) => _fetchPedidosSilencioso());
   }
 
   @override
@@ -83,7 +84,9 @@ class _PortalScreenState extends State<PortalScreen> {
       _simLat = simCoords['lat']!;
       _simLng = simCoords['lng']!;
       if (isRunning) {
-        _ultimaUbicacionTexto = simActiva ? 'Simulador activo: [$_simLat, $_simLng]' : 'Transmitiendo GPS...';
+        _ultimaUbicacionTexto = simActiva
+            ? 'Simulador activo: [$_simLat, $_simLng]'
+            : 'Transmitiendo GPS...';
       } else {
         _ultimaUbicacionTexto = 'Rastreo pausado.';
       }
@@ -113,7 +116,10 @@ class _PortalScreenState extends State<PortalScreen> {
       _alertasSonoras = nuevo;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(nuevo ? '🔔 Alertas de nuevos pedidos ACTIVADAS' : '🔕 Alertas de nuevos pedidos SILENCIADAS')),
+      SnackBar(
+          content: Text(nuevo
+              ? '🔔 Alertas de nuevos pedidos ACTIVADAS'
+              : '🔕 Alertas de nuevos pedidos SILENCIADAS')),
     );
   }
 
@@ -150,7 +156,8 @@ class _PortalScreenState extends State<PortalScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('❌ Necesitamos permiso de ubicación para rastrear.'),
+              content:
+                  Text('❌ Necesitamos permiso de ubicación para rastrear.'),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -162,8 +169,10 @@ class _PortalScreenState extends State<PortalScreen> {
     try {
       await FlutterForegroundTask.startService(
         serviceId: 888,
-        notificationTitle: _simulacionActiva ? '🛠️ Chefsy GPS (SIMULADO)' : '🛵 Chefsy Cadetería',
-        notificationText: _simulacionActiva 
+        notificationTitle: _simulacionActiva
+            ? '🛠️ Chefsy GPS (SIMULADO)'
+            : '🛵 Chefsy Cadetería',
+        notificationText: _simulacionActiva
             ? 'Simulación activa: [$_simLat, $_simLng]'
             : 'GPS activo. Podés guardar el celular en el bolsillo.',
         callback: startCallback,
@@ -171,7 +180,7 @@ class _PortalScreenState extends State<PortalScreen> {
       if (mounted) {
         setState(() {
           _estaRastreando = true;
-          _ultimaUbicacionTexto = _simulacionActiva 
+          _ultimaUbicacionTexto = _simulacionActiva
               ? 'Simulador activo: [$_simLat, $_simLng]'
               : 'Transmitiendo GPS...';
         });
@@ -193,14 +202,16 @@ class _PortalScreenState extends State<PortalScreen> {
     final cadeteId = _prefs?.getString('cadete_id') ?? '';
     if (cadeteId.isNotEmpty) {
       try {
-        await http.post(
-          Uri.parse('https://chefsy.xyz/api/public/ubicacion'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
-          },
-          body: jsonEncode({'cadeteId': cadeteId, 'gps_activo': false}),
-        ).timeout(const Duration(seconds: 4));
+        await http
+            .post(
+              Uri.parse('https://chefsy.xyz/api/public/ubicacion'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
+              },
+              body: jsonEncode({'cadeteId': cadeteId, 'gps_activo': false}),
+            )
+            .timeout(const Duration(seconds: 4));
       } catch (_) {}
     }
     await FlutterForegroundTask.stopService();
@@ -218,7 +229,8 @@ class _PortalScreenState extends State<PortalScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('¿Detener rastreo?'),
-          content: const Text('¿Estás seguro de que querés dejar de compartir tu ubicación?'),
+          content: const Text(
+              '¿Estás seguro de que querés dejar de compartir tu ubicación?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -254,7 +266,8 @@ class _PortalScreenState extends State<PortalScreen> {
     final list = await _apiService.fetchPedidos(widget.cadeteId);
     if (mounted) {
       if (_alertasSonoras) {
-        final oldActivos = _pedidosListos.where((p) => p.estado != 'entregado').length;
+        final oldActivos =
+            _pedidosListos.where((p) => p.estado != 'entregado').length;
         final newActivos = list.where((p) => p.estado != 'entregado').length;
         if (newActivos > oldActivos) {
           SystemSound.play(SystemSoundType.alert);
@@ -283,7 +296,8 @@ class _PortalScreenState extends State<PortalScreen> {
     var tel = telefono.replaceAll(RegExp(r'\D'), '');
     if (tel.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El cliente no tiene teléfono registrado')),
+        const SnackBar(
+            content: Text('El cliente no tiene teléfono registrado')),
       );
       return;
     }
@@ -291,10 +305,12 @@ class _PortalScreenState extends State<PortalScreen> {
       if (tel.startsWith('0')) tel = tel.substring(1);
       tel = '549$tel';
     }
-    final mensaje = "Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido!";
-    
+    final mensaje =
+        "Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido!";
+
     final uris = [
-      Uri.parse('whatsapp://send?phone=$tel&text=${Uri.encodeComponent(mensaje)}'),
+      Uri.parse(
+          'whatsapp://send?phone=$tel&text=${Uri.encodeComponent(mensaje)}'),
       Uri.parse('https://wa.me/$tel?text=${Uri.encodeComponent(mensaje)}'),
     ];
 
@@ -315,7 +331,8 @@ class _PortalScreenState extends State<PortalScreen> {
 
     if (!abierto && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir WhatsApp en este dispositivo.')),
+        const SnackBar(
+            content: Text('No se pudo abrir WhatsApp en este dispositivo.')),
       );
     }
   }
@@ -353,7 +370,8 @@ class _PortalScreenState extends State<PortalScreen> {
       // 2. Actualizar notificación (opcional visualmente)
       await FlutterForegroundTask.updateService(
         notificationTitle: '🛠️ Chefsy GPS (SIMULADO)',
-        notificationText: 'Simulación activa: [${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}]',
+        notificationText:
+            'Simulación activa: [${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}]',
       );
     }
   }
@@ -383,7 +401,8 @@ class _PortalScreenState extends State<PortalScreen> {
   void _teletransportarCliente() {
     if (_pedidosListos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay pedidos activos para teletransportar.')),
+        const SnackBar(
+            content: Text('No hay pedidos activos para teletransportar.')),
       );
       return;
     }
@@ -398,7 +417,9 @@ class _PortalScreenState extends State<PortalScreen> {
       }
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ninguno de los pedidos activos tiene coordenadas válidas.')),
+      const SnackBar(
+          content: Text(
+              'Ninguno de los pedidos activos tiene coordenadas válidas.')),
     );
   }
 
@@ -434,7 +455,11 @@ class _PortalScreenState extends State<PortalScreen> {
         backgroundColor: const Color(0xFF0F172A),
         actions: [
           IconButton(
-            icon: Icon(_alertasSonoras ? Icons.notifications_active_rounded : Icons.notifications_off_rounded, color: _alertasSonoras ? Colors.amber : Colors.white54),
+            icon: Icon(
+                _alertasSonoras
+                    ? Icons.notifications_active_rounded
+                    : Icons.notifications_off_rounded,
+                color: _alertasSonoras ? Colors.amber : Colors.white54),
             onPressed: _toggleAlertas,
           ),
           IconButton(
@@ -450,17 +475,177 @@ class _PortalScreenState extends State<PortalScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              // Banner de Actualización Shorebird / OTA
-              if (_mensajeActualizacion != null)
+                // Banner de Actualización Shorebird / OTA
+                if (_mensajeActualizacion != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _listoParaReiniciar
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFF3B82F6),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_listoParaReiniciar
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF3B82F6))
+                              .withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _listoParaReiniciar
+                              ? Icons.system_update_rounded
+                              : Icons.cloud_download_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _mensajeActualizacion!.split('|').first,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13),
+                          ),
+                        ),
+                        if (_listoParaReiniciar)
+                          ElevatedButton(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Reiniciá la app para activar el nuevo código.')),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF10B981),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                            ),
+                            child: const Text('Aplicar',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w900, fontSize: 12)),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                // Botón compacto de Rastreo en Bolsillo Activo (Superior y más chico)
+                GestureDetector(
+                  onTap: _toggleRastreo,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: _estaRastreando
+                            ? [const Color(0xFF10B981), const Color(0xFF047857)]
+                            : [
+                                const Color(0xFFE11D48),
+                                const Color(0xFF9F1239)
+                              ],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_estaRastreando
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFFE11D48))
+                              .withValues(alpha: 0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: Icon(
+                            _estaRastreando
+                                ? Icons.gps_fixed_rounded
+                                : Icons.play_circle_fill_rounded,
+                            key: ValueKey(_estaRastreando),
+                            size: 32,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _estaRastreando
+                                    ? (_simulacionActiva
+                                        ? 'SIMULACIÓN GPS ACTIVA'
+                                        : 'RASTREO EN BOLSILLO ACTIVO')
+                                    : 'INICIAR TURNO Y RASTREO',
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 0.5),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _ultimaUbicacionTexto,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    fontFamily: 'monospace'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _estaRastreando ? 'ON' : 'OFF',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11,
+                                color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Toggle de Modo Ahorro
                 Container(
                   margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: _listoParaReiniciar ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.white12),
                     boxShadow: [
                       BoxShadow(
-                        color: (_listoParaReiniciar ? const Color(0xFF10B981) : const Color(0xFF3B82F6)).withValues(alpha: 0.3),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -469,426 +654,375 @@ class _PortalScreenState extends State<PortalScreen> {
                   child: Row(
                     children: [
                       Icon(
-                        _listoParaReiniciar ? Icons.system_update_rounded : Icons.cloud_download_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _mensajeActualizacion!.split('|').first,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                      ),
-                      if (_listoParaReiniciar)
-                        ElevatedButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Reiniciá la app para activar el nuevo código.')),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF10B981),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          child: const Text('Aplicar', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-                        ),
-                    ],
-                  ),
-                ),
-
-              // Botón compacto de Rastreo en Bolsillo Activo (Superior y más chico)
-              GestureDetector(
-                onTap: _toggleRastreo,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: _estaRastreando
-                          ? [const Color(0xFF10B981), const Color(0xFF047857)]
-                          : [const Color(0xFFE11D48), const Color(0xFF9F1239)],
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (_estaRastreando ? const Color(0xFF10B981) : const Color(0xFFE11D48)).withValues(alpha: 0.35),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        child: Icon(
-                          _estaRastreando ? Icons.gps_fixed_rounded : Icons.play_circle_fill_rounded,
-                          key: ValueKey(_estaRastreando),
-                          size: 32,
-                          color: Colors.white,
-                        ),
+                        _modoAhorro ? Icons.battery_saver : Icons.battery_full,
+                        color: _modoAhorro
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF10B981),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              _estaRastreando
-                                  ? (_simulacionActiva ? 'SIMULACIÓN GPS ACTIVA' : 'RASTREO EN BOLSILLO ACTIVO')
-                                  : 'INICIAR TURNO Y RASTREO',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
+                            const Text(
+                              'Modo Ahorro de Energía',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Colors.white),
                             ),
-                            const SizedBox(height: 2),
                             Text(
-                              _ultimaUbicacionTexto,
-                              style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.85), fontFamily: 'monospace'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              _modoAhorro
+                                  ? 'GPS optimizado. Se actualiza cada 50m.'
+                                  : 'GPS preciso. Se actualiza cada 10m.',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.white70),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _estaRastreando ? 'ON' : 'OFF',
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Colors.white),
-                        ),
+                      Switch(
+                        value: _modoAhorro,
+                        activeColor: const Color(0xFFF59E0B),
+                        onChanged: (val) async {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool('modo_ahorro', val);
+                          setState(() {
+                            _modoAhorro = val;
+                          });
+
+                          // Si está rastreando, mostramos aviso de que aplique reiniciando
+                          if (_estaRastreando && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Apagá y prendé el rastreo para aplicar el cambio de batería.'),
+                                duration: Duration(seconds: 3),
+                              ),
+                            );
+                          }
+                        },
                       ),
                     ],
                   ),
                 ),
-              ),
 
-              // Toggle de Modo Ahorro
-              Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.white12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _modoAhorro ? Icons.battery_saver : Icons.battery_full,
-                      color: _modoAhorro ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Modo Ahorro de Energía',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
-                          ),
-                          Text(
-                            _modoAhorro ? 'GPS optimizado. Se actualiza cada 50m.' : 'GPS preciso. Se actualiza cada 10m.',
-                            style: TextStyle(fontSize: 11, color: Colors.white70),
-                          ),
-                        ],
+                // Sesión activa info (Doble tap activa controles de simulación)
+
+                GestureDetector(
+                  onDoubleTap: () {
+                    setState(() {
+                      _mostrarControlesSimulacion =
+                          !_mostrarControlesSimulacion;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(_mostrarControlesSimulacion
+                            ? '🛠️ Panel de Desarrollador Activado'
+                            : '🛠️ Panel de Desarrollador Oculto'),
+                        duration: const Duration(seconds: 1),
                       ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white12),
                     ),
-                    Switch(
-                      value: _modoAhorro,
-                      activeColor: const Color(0xFFF59E0B),
-                      onChanged: (val) async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setBool('modo_ahorro', val);
-                        setState(() {
-                          _modoAhorro = val;
-                        });
-                        
-                        // Si está rastreando, mostramos aviso de que aplique reiniciando
-                        if (_estaRastreando && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Apagá y prendé el rastreo para aplicar el cambio de batería.'),
-                              duration: Duration(seconds: 3),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              // Sesión activa info (Doble tap activa controles de simulación)
-
-
-              GestureDetector(
-                onDoubleTap: () {
-                  setState(() {
-                    _mostrarControlesSimulacion = !_mostrarControlesSimulacion;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(_mostrarControlesSimulacion 
-                          ? '🛠️ Panel de Desarrollador Activado' 
-                          : '🛠️ Panel de Desarrollador Oculto'),
-                      duration: const Duration(seconds: 1),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.account_circle_rounded,
-                              color: Color(0xFFE11D48), size: 28),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.cadeteNombre.toUpperCase(),
-                                style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white),
-                              ),
-                              const Text(
-                                'Sesión Repartidor Conectada',
-                                style: TextStyle(
-                                    fontSize: 11, color: Colors.white54),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: Colors.white60),
-                        icon: const Icon(Icons.logout_rounded, size: 18),
-                        label: const Text('Salir', style: TextStyle(fontSize: 12)),
-                        onPressed: _cerrarSesion,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Panel de Simulación (si está activo)
-              if (_mostrarControlesSimulacion) ...[
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.bug_report_rounded, color: Colors.blueAccent, size: 20),
-                              SizedBox(width: 6),
-                              Text(
-                                'MODO SIMULACIÓN GPS',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.blueAccent),
-                              ),
-                            ],
-                          ),
-                          Switch(
-                            value: _simulacionActiva,
-                            onChanged: _toggleSimulacion,
-                            activeThumbColor: Colors.blueAccent,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      if (_simulacionActiva) ...[
-                        Text(
-                          'Coords: [${_simLat.toStringAsFixed(5)}, ${_simLng.toStringAsFixed(5)}]',
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.white70),
-                        ),
-                        const SizedBox(height: 10),
-                        // Botones de teletransporte
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
                         Row(
                           children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue.withValues(alpha: 0.2),
-                                  foregroundColor: Colors.blue,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                            const Icon(Icons.account_circle_rounded,
+                                color: Color(0xFFE11D48), size: 28),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.cadeteNombre.toUpperCase(),
+                                  style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
                                 ),
-                                onPressed: _teletransportarLocal,
-                                child: const Text('Local Chefsy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.pink.withValues(alpha: 0.2),
-                                  foregroundColor: Colors.pinkAccent,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                const Text(
+                                  'Sesión Repartidor Conectada',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Colors.white54),
                                 ),
-                                onPressed: _teletransportarCliente,
-                                child: const Text('Cliente Pedido', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
+                              ],
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        // Controles de dirección (Joystick de flechas)
-                        Center(
-                          child: Column(
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                              foregroundColor: Colors.white60),
+                          icon: const Icon(Icons.logout_rounded, size: 18),
+                          label: const Text('Salir',
+                              style: TextStyle(fontSize: 12)),
+                          onPressed: _cerrarSesion,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Panel de Simulación (si está activo)
+                if (_mostrarControlesSimulacion) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: const Color(0xFF3B82F6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.bug_report_rounded,
+                                    color: Colors.blueAccent, size: 20),
+                                SizedBox(width: 6),
+                                Text(
+                                  'MODO SIMULACIÓN GPS',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.blueAccent),
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: _simulacionActiva,
+                              onChanged: _toggleSimulacion,
+                              activeThumbColor: Colors.blueAccent,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        if (_simulacionActiva) ...[
+                          Text(
+                            'Coords: [${_simLat.toStringAsFixed(5)}, ${_simLng.toStringAsFixed(5)}]',
+                            style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                                color: Colors.white70),
+                          ),
+                          const SizedBox(height: 10),
+                          // Botones de teletransporte
+                          Row(
                             children: [
-                              GestureDetector(
-                                onPanDown: (_) => _iniciarMovimiento(0.00015, 0.0), // Norte
-                                onPanEnd: (_) => _detenerMovimiento(),
-                                onPanCancel: _detenerMovimiento,
-                                child: const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Icon(Icons.arrow_upward_rounded, size: 36, color: Colors.white),
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        Colors.blue.withValues(alpha: 0.2),
+                                    foregroundColor: Colors.blue,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 8),
+                                  ),
+                                  onPressed: _teletransportarLocal,
+                                  child: const Text('Local Chefsy',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold)),
                                 ),
                               ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  GestureDetector(
-                                    onPanDown: (_) => _iniciarMovimiento(0.0, -0.00015), // Oeste
-                                    onPanEnd: (_) => _detenerMovimiento(),
-                                    onPanCancel: _detenerMovimiento,
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(8.0),
-                                      child: Icon(Icons.arrow_back_rounded, size: 36, color: Colors.white),
-                                    ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        Colors.pink.withValues(alpha: 0.2),
+                                    foregroundColor: Colors.pinkAccent,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 8),
                                   ),
-                                  const SizedBox(width: 40, child: Icon(Icons.navigation, color: Colors.blueAccent, size: 24)),
-                                  GestureDetector(
-                                    onPanDown: (_) => _iniciarMovimiento(0.0, 0.00015), // Este
-                                    onPanEnd: (_) => _detenerMovimiento(),
-                                    onPanCancel: _detenerMovimiento,
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(8.0),
-                                      child: Icon(Icons.arrow_forward_rounded, size: 36, color: Colors.white),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              GestureDetector(
-                                onPanDown: (_) => _iniciarMovimiento(-0.00015, 0.0), // Sur
-                                onPanEnd: (_) => _detenerMovimiento(),
-                                onPanCancel: _detenerMovimiento,
-                                child: const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Icon(Icons.arrow_downward_rounded, size: 36, color: Colors.white),
+                                  onPressed: _teletransportarCliente,
+                                  child: const Text('Cliente Pedido',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold)),
                                 ),
                               ),
                             ],
                           ),
-                        ),
+                          const SizedBox(height: 10),
+                          // Controles de dirección (Joystick de flechas)
+                          Center(
+                            child: Column(
+                              children: [
+                                GestureDetector(
+                                  onPanDown: (_) =>
+                                      _iniciarMovimiento(0.00015, 0.0), // Norte
+                                  onPanEnd: (_) => _detenerMovimiento(),
+                                  onPanCancel: _detenerMovimiento,
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(8.0),
+                                    child: Icon(Icons.arrow_upward_rounded,
+                                        size: 36, color: Colors.white),
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    GestureDetector(
+                                      onPanDown: (_) => _iniciarMovimiento(
+                                          0.0, -0.00015), // Oeste
+                                      onPanEnd: (_) => _detenerMovimiento(),
+                                      onPanCancel: _detenerMovimiento,
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(8.0),
+                                        child: Icon(Icons.arrow_back_rounded,
+                                            size: 36, color: Colors.white),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                        width: 40,
+                                        child: Icon(Icons.navigation,
+                                            color: Colors.blueAccent,
+                                            size: 24)),
+                                    GestureDetector(
+                                      onPanDown: (_) => _iniciarMovimiento(
+                                          0.0, 0.00015), // Este
+                                      onPanEnd: (_) => _detenerMovimiento(),
+                                      onPanCancel: _detenerMovimiento,
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(8.0),
+                                        child: Icon(Icons.arrow_forward_rounded,
+                                            size: 36, color: Colors.white),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                GestureDetector(
+                                  onPanDown: (_) =>
+                                      _iniciarMovimiento(-0.00015, 0.0), // Sur
+                                  onPanEnd: (_) => _detenerMovimiento(),
+                                  onPanCancel: _detenerMovimiento,
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(8.0),
+                                    child: Icon(Icons.arrow_downward_rounded,
+                                        size: 36, color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
+                ],
+
+                // Botón grande de rastreo movido a la parte superior en formato compacto
+
+                // Pedidos asignados
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('📦 MIS PEDIDOS',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            letterSpacing: 1,
+                            color: Colors.white60)),
+                    if (_cargandoPedidos)
+                      const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                  ],
                 ),
+                const SizedBox(height: 12),
 
-              // Botón grande de rastreo movido a la parte superior en formato compacto
-
-
-              // Pedidos asignados
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('📦 MIS PEDIDOS',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          letterSpacing: 1,
-                          color: Colors.white60)),
-                  if (_cargandoPedidos)
-                    const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              
-              // Tabs: Activos / Entregados
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _vistaActiva = 'activos'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _vistaActiva == 'activos' ? Colors.white : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: _vistaActiva == 'activos' ? Colors.black : Colors.transparent),
-                        ),
-                        child: Center(
-                          child: Text('Activos (${_pedidosListos.where((p) => p.estado != 'entregado').length})',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: _vistaActiva == 'activos' ? Colors.black : Colors.white70)),
+                // Tabs: Activos / Entregados
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _vistaActiva = 'activos'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _vistaActiva == 'activos'
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: _vistaActiva == 'activos'
+                                    ? Colors.black
+                                    : Colors.transparent),
+                          ),
+                          child: Center(
+                            child: Text(
+                                'Activos (${_pedidosListos.where((p) => p.estado != 'entregado').length})',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _vistaActiva == 'activos'
+                                        ? Colors.black
+                                        : Colors.white70)),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _vistaActiva = 'entregados'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _vistaActiva == 'entregados' ? Colors.white : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: _vistaActiva == 'entregados' ? Colors.black : Colors.transparent),
-                        ),
-                        child: Center(
-                          child: Text('Entregados (${_pedidosListos.where((p) => p.estado == 'entregado').length})',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: _vistaActiva == 'entregados' ? Colors.black : Colors.white70)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () =>
+                            setState(() => _vistaActiva = 'entregados'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _vistaActiva == 'entregados'
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: _vistaActiva == 'entregados'
+                                    ? Colors.black
+                                    : Colors.transparent),
+                          ),
+                          child: Center(
+                            child: Text(
+                                'Entregados (${_pedidosListos.where((p) => p.estado == 'entregado').length})',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _vistaActiva == 'entregados'
+                                        ? Colors.black
+                                        : Colors.white70)),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                  ],
+                ),
+                const SizedBox(height: 12),
 
-              Builder(
-                builder: (context) {
-                  final filtrados = _pedidosListos.where((p) => _vistaActiva == 'activos' ? p.estado != 'entregado' : p.estado == 'entregado').toList();
+                Builder(builder: (context) {
+                  final filtrados = _pedidosListos
+                      .where((p) => _vistaActiva == 'activos'
+                          ? p.estado != 'entregado'
+                          : p.estado == 'entregado')
+                      .toList();
                   if (filtrados.isEmpty) {
                     return Center(
                       child: Padding(
@@ -896,12 +1030,17 @@ class _PortalScreenState extends State<PortalScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(_vistaActiva == 'activos' ? Icons.inbox_rounded : Icons.check_circle_outline_rounded,
+                            Icon(
+                                _vistaActiva == 'activos'
+                                    ? Icons.inbox_rounded
+                                    : Icons.check_circle_outline_rounded,
                                 size: 54,
                                 color: Colors.white.withValues(alpha: 0.15)),
                             const SizedBox(height: 12),
                             Text(
-                              _vistaActiva == 'activos' ? 'No tenés pedidos activos en este momento.' : 'Aún no tenés pedidos entregados hoy.',
+                              _vistaActiva == 'activos'
+                                  ? 'No tenés pedidos activos en este momento.'
+                                  : 'Aún no tenés pedidos entregados hoy.',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                   color: Colors.white54, fontSize: 14),
@@ -912,21 +1051,21 @@ class _PortalScreenState extends State<PortalScreen> {
                     );
                   }
                   return ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: filtrados.length,
-                      itemBuilder: (context, idx) {
-                        final p = filtrados[idx];
-                        return TarjetaPedidoCadete(
-                          pedido: p,
-                          onAbrirWhatsApp: _abrirWhatsApp,
-                          onCambiarEstado: _cambiarEstadoPedido,
-                        );
-                      },
-                    );
-                }
-              ),
-            ],
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: filtrados.length,
+                    itemBuilder: (context, idx) {
+                      final p = filtrados[idx];
+                      return TarjetaPedidoCadete(
+                        pedido: p,
+                        onAbrirWhatsApp: _abrirWhatsApp,
+                        onCambiarEstado: _cambiarEstadoPedido,
+                      );
+                    },
+                  );
+                }),
+              ],
+            ),
           ),
         ),
       ),
