@@ -444,48 +444,6 @@ class _PortalScreenState extends State<PortalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            const Text('🛵 Chefsy Cadetería',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: _estaRastreando
-                    ? const Color(0xFF10B981).withValues(alpha: 0.2)
-                    : Colors.white10,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                _estaRastreando ? 'VIVO' : 'PAUSADO',
-                style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: _estaRastreando
-                        ? const Color(0xFF10B981)
-                        : Colors.white54),
-              ),
-            )
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        actions: [
-          IconButton(
-            icon: Icon(
-                _alertasSonoras
-                    ? Icons.notifications_active_rounded
-                    : Icons.notifications_off_rounded,
-                color: _alertasSonoras ? Colors.amber : Colors.white54),
-            onPressed: _toggleAlertas,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _fetchPedidos,
-          ),
-        ],
-      ),
       body: WithForegroundTask(
         child: SafeArea(
           child: SingleChildScrollView(
@@ -493,6 +451,96 @@ class _PortalScreenState extends State<PortalScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Cabecera compacta scrollable
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    GestureDetector(
+                      onDoubleTap: () {
+                        setState(() {
+                          _mostrarControlesSimulacion = !_mostrarControlesSimulacion;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(_mostrarControlesSimulacion
+                                ? '🛠️ Panel Dev Activado'
+                                : '🛠️ Panel Dev Oculto'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      child: Row(
+                        children: [
+                          const Text('🛵 Chefsy',
+                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _estaRastreando
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                                  : Colors.white10,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _estaRastreando ? 'VIVO' : 'PAUSADO',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: _estaRastreando
+                                      ? const Color(0xFF10B981)
+                                      : Colors.white54),
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: Icon(
+                              _alertasSonoras
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_off_rounded,
+                              color: _alertasSonoras ? Colors.amber : Colors.white54,
+                              size: 22),
+                          onPressed: _toggleAlertas,
+                        ),
+                        const SizedBox(width: 14),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.refresh_rounded, size: 22),
+                          onPressed: _fetchPedidos,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                
+                // Info Sesión (compacta)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Repartidor: ${widget.cadeteNombre.toUpperCase()}',
+                        style: const TextStyle(fontSize: 12, color: Colors.white54, fontWeight: FontWeight.bold),
+                      ),
+                      GestureDetector(
+                        onTap: _cerrarSesion,
+                        child: const Text(
+                          'Cerrar sesión',
+                          style: TextStyle(fontSize: 12, color: Color(0xFFE11D48), fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 // Banner de Actualización Shorebird / OTA
                 if (_mensajeActualizacion != null)
                   Container(
@@ -727,69 +775,7 @@ class _PortalScreenState extends State<PortalScreen> {
 
                 // Sesión activa info (Doble tap activa controles de simulación)
 
-                GestureDetector(
-                  onDoubleTap: () {
-                    setState(() {
-                      _mostrarControlesSimulacion =
-                          !_mostrarControlesSimulacion;
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(_mostrarControlesSimulacion
-                            ? '🛠️ Panel de Desarrollador Activado'
-                            : '🛠️ Panel de Desarrollador Oculto'),
-                        duration: const Duration(seconds: 1),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.account_circle_rounded,
-                                color: Color(0xFFE11D48), size: 28),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.cadeteNombre.toUpperCase(),
-                                  style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white),
-                                ),
-                                const Text(
-                                  'Sesión Repartidor Conectada',
-                                  style: TextStyle(
-                                      fontSize: 11, color: Colors.white54),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        TextButton.icon(
-                          style: TextButton.styleFrom(
-                              foregroundColor: Colors.white60),
-                          icon: const Icon(Icons.logout_rounded, size: 18),
-                          label: const Text('Salir',
-                              style: TextStyle(fontSize: 12)),
-                          onPressed: _cerrarSesion,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                // La info de sesión en grande fue movida y compactada al principio.
 
                 // Panel de Simulación (si está activo)
                 if (_mostrarControlesSimulacion) ...[
