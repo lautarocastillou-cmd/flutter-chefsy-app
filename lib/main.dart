@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'background_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/portal_screen.dart';
@@ -7,6 +8,12 @@ import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await Supabase.initialize(
+    url: 'https://bdwgglizirgyuxfwssvc.supabase.co',
+    anonKey: 'sb_publishable_g6nrbK_Q5h-DLsK1DMPSvA_3uSAyEQI',
+  );
+
   // Inicializar configuración del foreground task (sin arrancarlo todavía)
   initForegroundTask();
   runApp(const ChefsyCadeteApp());

@@ -13,7 +13,7 @@ import '../widgets/tarjeta_pedido.dart';
 import '../background_service.dart';
 import '../services/updater_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 class PortalScreen extends StatefulWidget {
   final String cadeteId;
   final String cadeteNombre;
@@ -36,6 +36,7 @@ class _PortalScreenState extends State<PortalScreen> {
   bool _cargandoPedidos = false;
   String _ultimaUbicacionTexto = 'Esperando señal GPS...';
   Timer? _pollingTimer;
+  RealtimeChannel? _pedidosChannel;
   bool _mostrarControlesSimulacion = false;
   bool _simulacionActiva = false;
   double _simLat = -32.8894;
@@ -59,12 +60,29 @@ class _PortalScreenState extends State<PortalScreen> {
     super.initState();
     _cargarDatos();
     _pollingTimer = Timer.periodic(
-        const Duration(seconds: 6), (_) => _fetchPedidosSilencioso());
+        const Duration(seconds: 15), (_) => _fetchPedidosSilencioso());
+    
+    _pedidosChannel = Supabase.instance.client
+        .channel('public:pedidos:cadete_${widget.cadeteId}')
+        .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'pedidos',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'cadete_id',
+              value: widget.cadeteId,
+            ),
+            callback: (payload) {
+              _fetchPedidosSilencioso();
+            })
+        .subscribe();
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _pedidosChannel?.unsubscribe();
     _joystickTimer?.cancel();
     super.dispose();
   }

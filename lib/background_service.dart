@@ -52,7 +52,7 @@ class GpsTaskHandler extends TaskHandler {
   // Umbrales de comportamiento
   static const double _metrosParaPausarRastreo = 30.0;   // Si se mueve menos de esto → considera que está quieto
   static const double _metrosParaReanudarRastreo = 80.0;  // Si se aleja más de esto del punto de pausa → reanuda
-  static const Duration _tiempoSinMovimientoParaPausar = Duration(minutes: 3); // Tiempo quieto antes de pausar
+  static const Duration _tiempoSinMovimientoParaPausar = Duration(minutes: 2); // Tiempo quieto antes de pausar
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -66,7 +66,7 @@ class GpsTaskHandler extends TaskHandler {
         final positionStream = Geolocator.getPositionStream(
           locationSettings: LocationSettings(
             accuracy: modoAhorro ? LocationAccuracy.low : LocationAccuracy.high,
-            distanceFilter: modoAhorro ? 50 : 10,
+            distanceFilter: modoAhorro ? 60 : 15,
           ),
         );
 
@@ -199,7 +199,7 @@ class GpsTaskHandler extends TaskHandler {
   void _enviarUbicacionReal(Position position) async {
     final ahora = DateTime.now();
     if (_ultimoReporteTime != null &&
-        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 4)) {
+        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 12)) {
       return;
     }
     _ultimoReporteTime = ahora;
