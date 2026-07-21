@@ -821,7 +821,6 @@ class _PortalScreenState extends State<PortalScreen> {
                     ],
                   ),
                 ),
-              ],
 
               // Botón grande de rastreo movido a la parte superior en formato compacto
 
