@@ -45,6 +45,7 @@ class _PortalScreenState extends State<PortalScreen> {
   Timer? _joystickTimer;
   String _vistaActiva = 'activos';
   bool _alertasSonoras = true;
+  int _ultimoCambioLocalMs = 0;
 
   SharedPreferences? _prefs;
 
@@ -284,11 +285,15 @@ class _PortalScreenState extends State<PortalScreen> {
     final list = await _apiService.fetchPedidos(widget.cadeteId);
     if (mounted) {
       if (_alertasSonoras) {
-        final oldActivos =
-            _pedidosListos.where((p) => p.estado != 'entregado').length;
-        final newActivos = list.where((p) => p.estado != 'entregado').length;
-        if (newActivos > oldActivos) {
-          SystemSound.play(SystemSoundType.alert);
+        final esCambioLocalReciente =
+            (DateTime.now().millisecondsSinceEpoch - _ultimoCambioLocalMs) < 6000;
+        if (!esCambioLocalReciente) {
+          final oldActivos =
+              _pedidosListos.where((p) => p.estado != 'entregado').length;
+          final newActivos = list.where((p) => p.estado != 'entregado').length;
+          if (newActivos > oldActivos) {
+            SystemSound.play(SystemSoundType.alert);
+          }
         }
       }
       setState(() {
@@ -298,6 +303,7 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   Future<void> _cambiarEstadoPedido(String id, String nuevoEstado) async {
+    _ultimoCambioLocalMs = DateTime.now().millisecondsSinceEpoch;
     final ok = await _apiService.cambiarEstadoPedido(id, nuevoEstado);
     if (ok) {
       _fetchPedidos();
