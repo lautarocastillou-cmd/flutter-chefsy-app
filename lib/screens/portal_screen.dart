@@ -491,7 +491,23 @@ class _PortalScreenState extends State<PortalScreen> {
                                       ? const Color(0xFF10B981)
                                       : Colors.white54),
                             ),
-                          )
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.5)),
+                            ),
+                            child: const Text(
+                              '⚡ OTA TEST OK',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.purpleAccent),
+                            ),
+                          ),
                         ],
                       ),
                     ),
