@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:restart_app/restart_app.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -627,12 +629,13 @@ class _PortalScreenState extends State<PortalScreen> {
                         ),
                         if (_listoParaReiniciar)
                           ElevatedButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        'Reiniciá la app para activar el nuevo código.')),
-                              );
+                            onPressed: () async {
+                              try {
+                                await Restart.restartApp();
+                              } catch (_) {
+                                SystemNavigator.pop();
+                                exit(0);
+                              }
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
@@ -640,7 +643,7 @@ class _PortalScreenState extends State<PortalScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 8),
                             ),
-                            child: const Text('Aplicar',
+                            child: const Text('Aplicar y Reiniciar',
                                 style: TextStyle(
                                     fontWeight: FontWeight.w900, fontSize: 12)),
                           ),
