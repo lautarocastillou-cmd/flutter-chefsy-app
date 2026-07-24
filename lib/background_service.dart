@@ -211,7 +211,7 @@ class GpsTaskHandler extends TaskHandler {
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 
-      if (position.accuracy > 35) return;
+      if (position.accuracy > 100) return;
 
       await http.post(
         Uri.parse(apiUrl),

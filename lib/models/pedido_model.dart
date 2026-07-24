@@ -31,6 +31,29 @@ class PedidoModel {
     this.coordenadas,
   });
 
+  PedidoModel copyWith({
+    String? estado,
+    bool? pagoConfirmado,
+    CoordenadasModel? coordenadas,
+  }) {
+    return PedidoModel(
+      id: id,
+      cliente: cliente,
+      telefono: telefono,
+      hora: hora,
+      estado: estado ?? this.estado,
+      direccion: direccion,
+      distanciaKm: distanciaKm,
+      productos: productos,
+      total: total,
+      costoEnvio: costoEnvio,
+      metodoPago: metodoPago,
+      pagoConfirmado: pagoConfirmado ?? this.pagoConfirmado,
+      observaciones: observaciones,
+      coordenadas: coordenadas ?? this.coordenadas,
+    );
+  }
+
   factory PedidoModel.fromJson(Map<String, dynamic> json) {
     var prodsList = json['productos'] as List? ?? [];
     List<ProductoItem> items = prodsList

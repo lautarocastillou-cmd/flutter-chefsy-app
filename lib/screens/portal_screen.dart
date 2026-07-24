@@ -46,6 +46,7 @@ class _PortalScreenState extends State<PortalScreen> {
   String _vistaActiva = 'activos';
   bool _alertasSonoras = true;
   int _ultimoCambioLocalMs = 0;
+  final Set<String> _cambiandoEstadoIds = {};
 
   SharedPreferences? _prefs;
 
@@ -303,15 +304,35 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   Future<void> _cambiarEstadoPedido(String id, String nuevoEstado) async {
-    _ultimoCambioLocalMs = DateTime.now().millisecondsSinceEpoch;
-    final ok = await _apiService.cambiarEstadoPedido(id, nuevoEstado);
-    if (ok) {
-      _fetchPedidos();
-    } else {
+    if (_cambiandoEstadoIds.contains(id)) return;
+
+    setState(() {
+      _cambiandoEstadoIds.add(id);
+      _ultimoCambioLocalMs = DateTime.now().millisecondsSinceEpoch;
+      // Actualización optimista instantánea local (0ms lag)
+      final idx = _pedidosListos.indexWhere((p) => p.id == id);
+      if (idx != -1) {
+        _pedidosListos[idx] = _pedidosListos[idx].copyWith(estado: nuevoEstado);
+      }
+    });
+
+    try {
+      final ok = await _apiService.cambiarEstadoPedido(id, nuevoEstado);
+      if (ok) {
+        _fetchPedidosSilencioso();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo actualizar el estado.')),
+          );
+          _fetchPedidosSilencioso();
+        }
+      }
+    } finally {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo actualizar el estado.')),
-        );
+        setState(() {
+          _cambiandoEstadoIds.remove(id);
+        });
       }
     }
   }
@@ -1086,6 +1107,7 @@ class _PortalScreenState extends State<PortalScreen> {
                         pedido: p,
                         onAbrirWhatsApp: _abrirWhatsApp,
                         onCambiarEstado: _cambiarEstadoPedido,
+                        estaCambiandoEstado: _cambiandoEstadoIds.contains(p.id),
                       );
                     },
                   );

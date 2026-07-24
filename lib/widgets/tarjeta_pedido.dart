@@ -6,12 +6,14 @@ class TarjetaPedidoCadete extends StatelessWidget {
   final PedidoModel pedido;
   final Function(String telefono, String cliente) onAbrirWhatsApp;
   final Function(String id, String nuevoEstado) onCambiarEstado;
+  final bool estaCambiandoEstado;
 
   const TarjetaPedidoCadete({
     super.key,
     required this.pedido,
     required this.onAbrirWhatsApp,
     required this.onCambiarEstado,
+    this.estaCambiandoEstado = false,
   });
 
   void _llamarCliente(BuildContext context, String tel) async {
@@ -446,29 +448,42 @@ class TarjetaPedidoCadete extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16)),
                   elevation: 2,
                 ),
-                icon: Icon(
-                  pedido.estado == 'en_cocina'
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.delivery_dining_rounded,
-                  size: 20,
-                ),
+                icon: estaCambiandoEstado
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : Icon(
+                        pedido.estado == 'en_cocina'
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.delivery_dining_rounded,
+                        size: 20,
+                      ),
                 label: Text(
-                  pedido.estado == 'en_cocina'
-                      ? 'MARCAR COMO LISTO'
-                      : pedido.estado == 'listo'
-                          ? 'COMENZAR VIAJE'
-                          : 'MARCAR COMO ENTREGADO',
+                  estaCambiandoEstado
+                      ? 'ACTUALIZANDO...'
+                      : pedido.estado == 'en_cocina'
+                          ? 'MARCAR COMO LISTO'
+                          : pedido.estado == 'listo'
+                              ? 'COMENZAR VIAJE'
+                              : 'MARCAR COMO ENTREGADO',
                   style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.8),
                 ),
-                onPressed: () {
-                  final nuevoEstado =
-                      pedido.estado == 'en_cocina' ? 'listo' : 
-                      pedido.estado == 'listo' ? 'en_camino' : 'entregado';
-                  onCambiarEstado(pedido.id, nuevoEstado);
-                },
+                onPressed: estaCambiandoEstado
+                    ? null
+                    : () {
+                        final nuevoEstado =
+                            pedido.estado == 'en_cocina' ? 'listo' : 
+                            pedido.estado == 'listo' ? 'en_camino' : 'entregado';
+                        onCambiarEstado(pedido.id, nuevoEstado);
+                      },
               ),
             ),
           ],
