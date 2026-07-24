@@ -73,3 +73,9 @@ jobs:
           files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Subir APK a Servidores Públicos de Chefsy (Supabase Storage)
+        run: |
+          curl -X POST "https://chefsy.app/api/cadeteria/subir-apk" \
+            -H "Authorization: Bearer ${{ secrets.FLUTTER_SECRET_TOKEN || 'chefsy-flutter-secret-2026' }}" \
+            -F "file=@build/app/outputs/flutter-apk/app-release.apk"
