@@ -58,8 +58,18 @@ jobs:
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
 
-      - name: Subir APK para Descargar
+      - name: Subir APK para Descargar (Artifact)
         uses: actions/upload-artifact@v4
         with:
           name: app-release-base-shorebird
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publicar GitHub Release con la última APK
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: "Chefsy Cadete App (Última versión APK)"
+          body: "APK oficial de Cadetería compilada automáticamente por GitHub Actions con Shorebird."
+          files: build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
