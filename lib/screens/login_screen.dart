@@ -73,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -80,42 +81,51 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Logo Oficial Chefsy Fast Food
                 Container(
-                  width: 80,
-                  height: 80,
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFE11D48), Color(0xFF9F1239)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFE11D48).withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        color: const Color(0xFF2A6348).withValues(alpha: 0.35),
+                        blurRadius: 25,
+                        offset: const Offset(0, 10),
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.delivery_dining_rounded,
-                      size: 46, color: Colors.white),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.asset(
+                      'assets/logo.png',
+                      height: 95,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.delivery_dining_rounded,
+                        size: 60,
+                        color: Color(0xFF2A6348),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
                 const Text(
                   'CHEFSY CADETERÍA',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 1.5,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Acceso Oficial con tu Usuario Chefsy',
+                  'Acceso Oficial para Repartidores',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 14,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 36),
@@ -124,10 +134,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Usuario',
-                    prefixIcon: const Icon(Icons.person_outline_rounded),
+                    labelStyle: const TextStyle(color: Colors.white60),
+                    prefixIcon: const Icon(Icons.person_outline_rounded, color: Color(0xFF2A6348)),
                     filled: true,
                     fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFF2A6348), width: 1.5),
+                    ),
+                    enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
                     ),
@@ -140,10 +155,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Contraseña',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    labelStyle: const TextStyle(color: Colors.white60),
+                    prefixIcon: const Icon(Icons.lock_outline_rounded, color: Color(0xFF2A6348)),
                     filled: true,
                     fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFF2A6348), width: 1.5),
+                    ),
+                    enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
                     ),
@@ -153,33 +173,50 @@ class _LoginScreenState extends State<LoginScreen> {
                 SizedBox(
                   width: double.infinity,
                   height: 54,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE11D48),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2A6348), Color(0xFF1B4332)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      elevation: 4,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF2A6348).withValues(alpha: 0.4),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
-                    onPressed: _logueando ? null : _login,
-                    child: _logueando
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onPressed: _logueando ? null : _login,
+                      child: _logueando
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : const Text(
+                              'INICIAR SESIÓN',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                              ),
                             ),
-                          )
-                        : const Text(
-                            'INICIAR SESIÓN',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1,
-                            ),
-                          ),
+                    ),
                   ),
                 ),
               ],
