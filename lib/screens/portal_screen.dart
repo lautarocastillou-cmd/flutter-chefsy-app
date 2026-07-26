@@ -65,18 +65,12 @@ class _PortalScreenState extends State<PortalScreen> {
     _cargarDatos();
     _pollingTimer = Timer.periodic(
         const Duration(seconds: 15), (_) => _fetchPedidosSilencioso());
-    
     _pedidosChannel = Supabase.instance.client
         .channel('public:pedidos:cadete_${widget.cadeteId}')
         .onPostgresChanges(
             event: PostgresChangeEvent.all,
             schema: 'public',
             table: 'pedidos',
-            filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'cadete_id',
-              value: widget.cadeteId,
-            ),
             callback: (payload) {
               _fetchPedidosSilencioso();
             })
@@ -102,7 +96,7 @@ class _PortalScreenState extends State<PortalScreen> {
       _estaRastreando = isRunning;
       _simulacionActiva = simActiva;
       _modoAhorro = prefs.getBool('modo_ahorro') ?? false;
-      _alertasSonoras = prefs.getBool('alertas_sonoras') ?? true;
+      _alertasSonoras = true;
       _simLat = simCoords['lat']!;
       _simLng = simCoords['lng']!;
       if (isRunning) {
@@ -525,46 +519,14 @@ class _PortalScreenState extends State<PortalScreen> {
                                       : Colors.white54),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.purple.withValues(alpha: 0.25),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.5)),
-                            ),
-                            child: const Text(
-                              '⚡ OTA TEST OK',
-                              style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.purpleAccent),
-                            ),
-                          ),
                         ],
                       ),
                     ),
-                    Row(
-                      children: [
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          icon: Icon(
-                              _alertasSonoras
-                                  ? Icons.notifications_active_rounded
-                                  : Icons.notifications_off_rounded,
-                              color: _alertasSonoras ? Colors.amber : Colors.white54,
-                              size: 22),
-                          onPressed: _toggleAlertas,
-                        ),
-                        const SizedBox(width: 14),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          icon: const Icon(Icons.refresh_rounded, size: 22),
-                          onPressed: _fetchPedidos,
-                        ),
-                      ],
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: const Icon(Icons.refresh_rounded, size: 22),
+                      onPressed: _fetchPedidos,
                     ),
                   ],
                 ),
@@ -750,78 +712,7 @@ class _PortalScreenState extends State<PortalScreen> {
                   ),
                 ),
 
-                // Toggle de Modo Ahorro
-                Container(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.white12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _modoAhorro ? Icons.battery_saver : Icons.battery_full,
-                        color: _modoAhorro
-                            ? const Color(0xFFF59E0B)
-                            : const Color(0xFF10B981),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Modo Ahorro de Energía',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: Colors.white),
-                            ),
-                            Text(
-                              _modoAhorro
-                                  ? 'GPS optimizado. Se actualiza cada 50m.'
-                                  : 'GPS preciso. Se actualiza cada 10m.',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: _modoAhorro,
-                        activeColor: const Color(0xFFF59E0B),
-                        onChanged: (val) async {
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.setBool('modo_ahorro', val);
-                          setState(() {
-                            _modoAhorro = val;
-                          });
 
-                          // Si está rastreando, mostramos aviso de que aplique reiniciando
-                          if (_estaRastreando && mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Apagá y prendé el rastreo para aplicar el cambio de batería.'),
-                                duration: Duration(seconds: 3),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
 
                 // Sesión activa info (Doble tap activa controles de simulación)
 
