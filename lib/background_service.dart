@@ -50,9 +50,9 @@ class GpsTaskHandler extends TaskHandler {
   DateTime? _tiempoDetenido;
 
   // Umbrales de comportamiento
-  static const double _metrosParaPausarRastreo = 30.0;   // Si se mueve menos de esto → considera que está quieto
-  static const double _metrosParaReanudarRastreo = 80.0;  // Si se aleja más de esto del punto de pausa → reanuda
-  static const Duration _tiempoSinMovimientoParaPausar = Duration(minutes: 2); // Tiempo quieto antes de pausar
+  static const double _metrosParaPausarRastreo = 20.0;   // Si se mueve menos de esto → considera que está quieto
+  static const double _metrosParaReanudarRastreo = 15.0;  // Reanuda rápido ante cualquier movimiento
+  static const Duration _tiempoSinMovimientoParaPausar = Duration(minutes: 5); // 5 min de espera quieto antes de pausar
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -199,7 +199,7 @@ class GpsTaskHandler extends TaskHandler {
   void _enviarUbicacionReal(Position position) async {
     final ahora = DateTime.now();
     if (_ultimoReporteTime != null &&
-        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 12)) {
+        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 4)) {
       return;
     }
     _ultimoReporteTime = ahora;
@@ -237,6 +237,43 @@ class GpsTaskHandler extends TaskHandler {
   @override
   Future<void> onDestroy(DateTime timestamp) async {
     await _positionStreamSub?.cancel();
+  }
+}
+
+/// Envía inmediatamente la ubicación GPS actual al servidor.
+/// Útil al presionar "COMENZAR VIAJE" para que los clientes vean el mapa al instante.
+Future<bool> reportarUbicacionAhora() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final cadeteId = prefs.getString('cadete_id');
+    if (cadeteId == null || cadeteId.isEmpty) return false;
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 5),
+      ),
+    );
+
+    final res = await http.post(
+      Uri.parse(apiUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $secretToken',
+      },
+      body: jsonEncode({
+        'cadeteId': cadeteId,
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'accuracy': position.accuracy,
+        'speed': position.speed >= 0 ? position.speed : 0,
+        'heading': position.heading >= 0 ? position.heading : 0,
+      }),
+    ).timeout(const Duration(seconds: 5));
+
+    return res.statusCode == 200;
+  } catch (_) {
+    return false;
   }
 }
 

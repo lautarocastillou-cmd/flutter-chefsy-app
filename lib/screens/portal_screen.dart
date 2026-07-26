@@ -321,6 +321,10 @@ class _PortalScreenState extends State<PortalScreen> {
     try {
       final ok = await _apiService.cambiarEstadoPedido(id, nuevoEstado);
       if (ok) {
+        if (nuevoEstado == 'en_camino') {
+          // Disparar reporte inmediato de GPS al servidor
+          reportarUbicacionAhora();
+        }
         _fetchPedidosSilencioso();
       } else {
         if (mounted) {
