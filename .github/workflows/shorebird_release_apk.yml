@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -21,6 +21,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.29.0'
           channel: 'stable'
 
       - name: Setup Shorebird
@@ -31,13 +32,18 @@ jobs:
       - name: Generate local.properties for Android SDK
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" >> android/local.properties
+          echo "flutter.sdk=$(dirname $(dirname $(which flutter)))" >> android/local.properties
           cat android/local.properties
 
       - name: Get Dependencies
         run: |
           chmod +x android/gradlew
           flutter pub get
+
+      - name: Verificar build Flutter (diagnóstico)
+        run: |
+          flutter build apk --release --verbose 2>&1 | tail -100
+        continue-on-error: true
 
       - name: Shorebird Init (Crear app en la nube si no existe)
         run: |
@@ -54,7 +60,7 @@ jobs:
 
       - name: Compilar APK Base con Shorebird
         run: |
-          shorebird release android --artifact apk --flutter-version=3.29.0 -- --android-skip-build-dependency-validation
+          shorebird release android --artifact apk --flutter-version=3.29.0
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
 

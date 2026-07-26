@@ -249,10 +249,7 @@ Future<bool> reportarUbicacionAhora() async {
     if (cadeteId == null || cadeteId.isEmpty) return false;
 
     final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 5),
-      ),
+      desiredAccuracy: LocationAccuracy.high,
     );
 
     final res = await http.post(
