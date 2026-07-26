@@ -54,7 +54,7 @@ jobs:
 
       - name: Compilar APK Base con Shorebird
         run: |
-          shorebird release android --artifact apk -- --android-skip-build-dependency-validation
+          shorebird release android --artifact apk --flutter-version=3.29.0 -- --android-skip-build-dependency-validation
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
 
