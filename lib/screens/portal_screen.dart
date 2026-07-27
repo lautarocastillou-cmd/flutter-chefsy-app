@@ -752,7 +752,7 @@ class _PortalScreenState extends State<PortalScreen> {
                             Switch(
                               value: _simulacionActiva,
                               onChanged: _toggleSimulacion,
-                              activeThumbColor: Colors.blueAccent,
+                              activeColor: Colors.blueAccent,
                             ),
                           ],
                         ),
