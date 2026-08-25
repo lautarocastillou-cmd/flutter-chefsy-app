@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -36,6 +37,7 @@ class GpsTaskHandler extends TaskHandler {
   StreamSubscription<Position>? _positionStreamSub;
   DateTime? _ultimoReporteTime;
   bool _simulacionActiva = false;
+  final Battery _battery = Battery();
 
   // Variables en memoria para joystick en tiempo real
   double? _liveSimLat;
@@ -171,8 +173,13 @@ class GpsTaskHandler extends TaskHandler {
         final cadeteId = _prefs?.getString('cadete_id');
         if (cadeteId == null || cadeteId.isEmpty) return;
 
-        final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -32.8894;
-        final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -68.8458;
+        final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -28.46281;
+        final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -65.77850;
+
+        int? batteryLevel;
+        try {
+          batteryLevel = await _battery.batteryLevel;
+        } catch (_) {}
 
         await http.post(
           Uri.parse(apiUrl),
@@ -187,6 +194,7 @@ class GpsTaskHandler extends TaskHandler {
             'accuracy': 5.0,
             'speed': 25.0,
             'heading': 90.0,
+            if (batteryLevel != null) 'batteryLevel': batteryLevel,
           }),
         ).timeout(const Duration(seconds: 4));
       }
@@ -213,6 +221,11 @@ class GpsTaskHandler extends TaskHandler {
 
       if (position.accuracy > 100) return;
 
+      int? batteryLevel;
+      try {
+        batteryLevel = await _battery.batteryLevel;
+      } catch (_) {}
+
       await http.post(
         Uri.parse(apiUrl),
         headers: {
@@ -226,6 +239,7 @@ class GpsTaskHandler extends TaskHandler {
           'accuracy': position.accuracy,
           'speed': position.speed >= 0 ? position.speed : 0,
           'heading': position.heading >= 0 ? position.heading : 0,
+          if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 4));
     } catch (_) {

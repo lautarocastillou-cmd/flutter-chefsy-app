@@ -41,8 +41,8 @@ class _PortalScreenState extends State<PortalScreen> {
   RealtimeChannel? _pedidosChannel;
   bool _mostrarControlesSimulacion = false;
   bool _simulacionActiva = false;
-  double _simLat = -32.8894;
-  double _simLng = -68.8458;
+  double _simLat = -28.46281; // Coordenadas reales del local Chefsy
+  double _simLng = -65.77850;
   bool _modoAhorro = false;
   Timer? _joystickTimer;
   String _vistaActiva = 'activos';
@@ -350,8 +350,7 @@ class _PortalScreenState extends State<PortalScreen> {
       if (tel.startsWith('0')) tel = tel.substring(1);
       tel = '549$tel';
     }
-    final mensaje =
-        "Hola $cliente! Soy tu repartidor de Chefsy 🛵. Estoy en camino con tu pedido!";
+    final mensaje = "Hola, estoy en camino!";
 
     final uris = [
       Uri.parse(
@@ -439,8 +438,8 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   void _teletransportarLocal() {
-    // Coordenadas local de Chefsy en Mendoza
-    _actualizarSimCoords(-32.8894, -68.8458);
+    // Coordenadas reales del local de Chefsy en Frías, Santiago del Estero
+    _actualizarSimCoords(-28.46281, -65.77850);
   }
 
   void _teletransportarCliente() {
