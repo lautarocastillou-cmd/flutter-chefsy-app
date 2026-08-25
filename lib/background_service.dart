@@ -162,42 +162,43 @@ class GpsTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
+    // El timer repetitivo solo es necesario para el joystick del simulador.
+    // En modo real, el positionStream gestiona los envíos reactivamente por movimiento para ahorrar batería.
+    final simActiva = _prefs?.getBool('simulacion_activa') ?? false;
+    if (!simActiva) return;
+
     if (_ocupado) return;
 
     try {
-      final simActiva = _prefs?.getBool('simulacion_activa') ?? false;
+      _ocupado = true;
       
-      if (simActiva) {
-        _ocupado = true;
-        
-        final cadeteId = _prefs?.getString('cadete_id');
-        if (cadeteId == null || cadeteId.isEmpty) return;
+      final cadeteId = _prefs?.getString('cadete_id');
+      if (cadeteId == null || cadeteId.isEmpty) return;
 
-        final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -28.46281;
-        final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -65.77850;
+      final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -28.46281;
+      final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -65.77850;
 
-        int? batteryLevel;
-        try {
-          batteryLevel = await _battery.batteryLevel;
-        } catch (_) {}
+      int? batteryLevel;
+      try {
+        batteryLevel = await _battery.batteryLevel;
+      } catch (_) {}
 
-        await http.post(
-          Uri.parse(apiUrl),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $secretToken',
-          },
-          body: jsonEncode({
-            'cadeteId': cadeteId,
-            'lat': lat,
-            'lng': lng,
-            'accuracy': 5.0,
-            'speed': 25.0,
-            'heading': 90.0,
-            if (batteryLevel != null) 'batteryLevel': batteryLevel,
-          }),
-        ).timeout(const Duration(seconds: 4));
-      }
+      await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $secretToken',
+        },
+        body: jsonEncode({
+          'cadeteId': cadeteId,
+          'lat': lat,
+          'lng': lng,
+          'accuracy': 5.0,
+          'speed': 25.0,
+          'heading': 90.0,
+          if (batteryLevel != null) 'batteryLevel': batteryLevel,
+        }),
+      ).timeout(const Duration(seconds: 4));
     } catch (_) {
     } finally {
       _ocupado = false;
@@ -219,7 +220,8 @@ class GpsTaskHandler extends TaskHandler {
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 
-      if (position.accuracy > 100) return;
+      // Filtro anti-teletransporte: descartar lecturas con margen de error mayor a 45 metros
+      if (position.accuracy > 45) return;
 
       int? batteryLevel;
       try {
@@ -265,6 +267,8 @@ Future<bool> reportarUbicacionAhora() async {
     final position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
+
+    if (position.accuracy > 45) return false;
 
     final res = await http.post(
       Uri.parse(apiUrl),
