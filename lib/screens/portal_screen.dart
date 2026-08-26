@@ -1062,6 +1062,7 @@ class _PortalScreenState extends State<PortalScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
