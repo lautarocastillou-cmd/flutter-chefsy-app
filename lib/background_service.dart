@@ -23,7 +23,7 @@ void initForegroundTask() {
       playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(4000),
+      eventAction: ForegroundTaskEventAction.repeat(5000), // cada 5 seg
       autoRunOnBoot: false,
       allowWakeLock: true,
     ),
@@ -36,25 +36,13 @@ class GpsTaskHandler extends TaskHandler {
   bool _ocupado = false;
   StreamSubscription<Position>? _positionStreamSub;
   DateTime? _ultimoReporteTime;
+  Position? _ultimaPosicionValida;
   bool _simulacionActiva = false;
   final Battery _battery = Battery();
 
   // Variables en memoria para joystick en tiempo real
   double? _liveSimLat;
   double? _liveSimLng;
-
-  // --- Lógica de Auto-Pausa en el local ---
-  // Modo pausa: el cadete no se movió, dejamos de reportar al servidor.
-  bool _enModoPausa = false;
-  // Punto donde detectamos que se detuvo.
-  Position? _posicionDetencion;
-  // Marca de tiempo desde cuando está quieto.
-  DateTime? _tiempoDetenido;
-
-  // Umbrales de comportamiento
-  static const double _metrosParaPausarRastreo = 20.0;   // Si se mueve menos de esto → considera que está quieto
-  static const double _metrosParaReanudarRastreo = 15.0;  // Reanuda rápido ante cualquier movimiento
-  static const Duration _tiempoSinMovimientoParaPausar = Duration(minutes: 5); // 5 min de espera quieto antes de pausar
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -63,88 +51,43 @@ class GpsTaskHandler extends TaskHandler {
       _simulacionActiva = _prefs?.getBool('simulacion_activa') ?? false;
 
       if (!_simulacionActiva) {
+        // 1. Obtener y enviar de inmediato la primera posición y batería
+        try {
+          final initialPos = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+            timeLimit: const Duration(seconds: 4),
+          );
+          _ultimaPosicionValida = initialPos;
+          _enviarUbicacionReal(initialPos);
+        } catch (_) {
+          try {
+            final lastKnown = await Geolocator.getLastKnownPosition();
+            if (lastKnown != null) {
+              _ultimaPosicionValida = lastKnown;
+              _enviarUbicacionReal(lastKnown);
+            }
+          } catch (_) {}
+        }
+
+        // 2. Escuchar cambios continuos de posición
         final modoAhorro = _prefs?.getBool('modo_ahorro') ?? false;
 
         final positionStream = Geolocator.getPositionStream(
           locationSettings: LocationSettings(
             accuracy: modoAhorro ? LocationAccuracy.low : LocationAccuracy.high,
-            distanceFilter: modoAhorro ? 60 : 15,
+            distanceFilter: modoAhorro ? 30 : 5, // Sensible para detectar movimiento
           ),
         );
 
         _positionStreamSub = positionStream.listen(
           (Position position) {
-            _procesarPosicion(position);
+            _ultimaPosicionValida = position;
+            _enviarUbicacionReal(position);
           },
           onError: (_) {},
         );
       }
     } catch (_) {}
-  }
-
-  /// Evalúa la posición recibida y decide si reportarla o pausar.
-  void _procesarPosicion(Position position) {
-    // Si estamos en modo pausa, verificar si el cadete se alejó suficiente para reanudar
-    if (_enModoPausa) {
-      if (_posicionDetencion != null) {
-        final distanciaDesdeDetencion = Geolocator.distanceBetween(
-          _posicionDetencion!.latitude,
-          _posicionDetencion!.longitude,
-          position.latitude,
-          position.longitude,
-        );
-
-        if (distanciaDesdeDetencion >= _metrosParaReanudarRastreo) {
-          // ¡El cadete se movió! Reanudamos el rastreo
-          _enModoPausa = false;
-          _posicionDetencion = null;
-          _tiempoDetenido = null;
-          FlutterForegroundTask.updateService(
-            notificationTitle: '🛵 Chefsy Cadetería',
-            notificationText: 'GPS activo. Transmitiendo ubicación.',
-          );
-          _enviarUbicacionReal(position);
-        }
-        // Si no se alejó suficiente, seguimos en pausa (no reportamos)
-      }
-      return;
-    }
-
-    // --- Modo activo: evaluar si el cadete está quieto ---
-    if (_posicionDetencion != null) {
-      final distanciaActual = Geolocator.distanceBetween(
-        _posicionDetencion!.latitude,
-        _posicionDetencion!.longitude,
-        position.latitude,
-        position.longitude,
-      );
-
-      if (distanciaActual < _metrosParaPausarRastreo) {
-        // Sigue en el mismo lugar, actualizar tiempo
-        _tiempoDetenido ??= DateTime.now();
-        final tiempoQuieto = DateTime.now().difference(_tiempoDetenido!);
-
-        if (tiempoQuieto >= _tiempoSinMovimientoParaPausar) {
-          // Lleva 3+ minutos quieto → pausar reportes
-          _enModoPausa = true;
-          FlutterForegroundTask.updateService(
-            notificationTitle: '🛵 Chefsy — En espera',
-            notificationText: 'GPS pausado. Se reanudará al moverte.',
-          );
-          return;
-        }
-      } else {
-        // Se movió, resetear el contador
-        _posicionDetencion = position;
-        _tiempoDetenido = null;
-      }
-    } else {
-      // Primera posición recibida
-      _posicionDetencion = position;
-    }
-
-    // Reportar normalmente
-    _enviarUbicacionReal(position);
   }
 
   @override
@@ -162,53 +105,68 @@ class GpsTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
-    // El timer repetitivo solo es necesario para el joystick del simulador.
-    // En modo real, el positionStream gestiona los envíos reactivamente por movimiento para ahorrar batería.
-    final simActiva = _prefs?.getBool('simulacion_activa') ?? false;
-    if (!simActiva) return;
-
     if (_ocupado) return;
 
-    try {
-      _ocupado = true;
-      
-      final cadeteId = _prefs?.getString('cadete_id');
-      if (cadeteId == null || cadeteId.isEmpty) return;
+    final simActiva = _prefs?.getBool('simulacion_activa') ?? false;
 
-      final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -28.46281;
-      final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -65.77850;
-
-      int? batteryLevel;
+    if (simActiva) {
+      // --- Modo Simulación Joystick ---
       try {
-        batteryLevel = await _battery.batteryLevel;
-      } catch (_) {}
+        _ocupado = true;
+        final cadeteId = _prefs?.getString('cadete_id');
+        if (cadeteId == null || cadeteId.isEmpty) return;
 
-      await http.post(
-        Uri.parse(apiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $secretToken',
-        },
-        body: jsonEncode({
-          'cadeteId': cadeteId,
-          'lat': lat,
-          'lng': lng,
-          'accuracy': 5.0,
-          'speed': 25.0,
-          'heading': 90.0,
-          if (batteryLevel != null) 'batteryLevel': batteryLevel,
-        }),
-      ).timeout(const Duration(seconds: 4));
-    } catch (_) {
-    } finally {
-      _ocupado = false;
+        final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -28.46281;
+        final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -65.77850;
+
+        int? batteryLevel;
+        try {
+          batteryLevel = await _battery.batteryLevel;
+        } catch (_) {}
+
+        await http.post(
+          Uri.parse(apiUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $secretToken',
+          },
+          body: jsonEncode({
+            'cadeteId': cadeteId,
+            'lat': lat,
+            'lng': lng,
+            'accuracy': 5.0,
+            'speed': 25.0,
+            'heading': 90.0,
+            if (batteryLevel != null) 'batteryLevel': batteryLevel,
+          }),
+        ).timeout(const Duration(seconds: 4));
+      } catch (_) {
+      } finally {
+        _ocupado = false;
+      }
+    } else {
+      // --- Modo Real: Heartbeat periódico cada 15 segundos si no hubo movimiento ---
+      final ahora = DateTime.now();
+      if (_ultimoReporteTime == null || ahora.difference(_ultimoReporteTime!) >= const Duration(seconds: 15)) {
+        if (_ultimaPosicionValida != null) {
+          _enviarUbicacionReal(_ultimaPosicionValida!);
+        } else {
+          try {
+            final pos = await Geolocator.getLastKnownPosition();
+            if (pos != null) {
+              _ultimaPosicionValida = pos;
+              _enviarUbicacionReal(pos);
+            }
+          } catch (_) {}
+        }
+      }
     }
   }
 
   void _enviarUbicacionReal(Position position) async {
     final ahora = DateTime.now();
     if (_ultimoReporteTime != null &&
-        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 4)) {
+        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 3)) {
       return;
     }
     _ultimoReporteTime = ahora;
@@ -217,11 +175,9 @@ class GpsTaskHandler extends TaskHandler {
     _ocupado = true;
 
     try {
+      _prefs ??= await SharedPreferences.getInstance();
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
-
-      // Filtro anti-teletransporte: descartar lecturas con margen de error mayor a 45 metros
-      if (position.accuracy > 45) return;
 
       int? batteryLevel;
       try {
@@ -256,19 +212,29 @@ class GpsTaskHandler extends TaskHandler {
   }
 }
 
-/// Envía inmediatamente la ubicación GPS actual al servidor.
-/// Útil al presionar "COMENZAR VIAJE" para que los clientes vean el mapa al instante.
-Future<bool> reportarUbicacionAhora() async {
+/// Envía inmediatamente la ubicación GPS actual y batería al servidor.
+Future<bool> reportarUbicacionAhora([String? idCadete]) async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    final cadeteId = prefs.getString('cadete_id');
+    final cadeteId = idCadete ?? prefs.getString('cadete_id');
     if (cadeteId == null || cadeteId.isEmpty) return false;
 
-    final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+    Position? position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 4),
+      );
+    } catch (_) {
+      position = await Geolocator.getLastKnownPosition();
+    }
 
-    if (position.accuracy > 45) return false;
+    if (position == null) return false;
+
+    int? batteryLevel;
+    try {
+      batteryLevel = await Battery().batteryLevel;
+    } catch (_) {}
 
     final res = await http.post(
       Uri.parse(apiUrl),
@@ -283,6 +249,7 @@ Future<bool> reportarUbicacionAhora() async {
         'accuracy': position.accuracy,
         'speed': position.speed >= 0 ? position.speed : 0,
         'heading': position.heading >= 0 ? position.heading : 0,
+        if (batteryLevel != null) 'batteryLevel': batteryLevel,
       }),
     ).timeout(const Duration(seconds: 5));
 
@@ -296,3 +263,4 @@ Future<bool> reportarUbicacionAhora() async {
 void startCallback() {
   FlutterForegroundTask.setTaskHandler(GpsTaskHandler());
 }
+
