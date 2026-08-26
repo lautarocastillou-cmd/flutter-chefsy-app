@@ -97,9 +97,9 @@ class TarjetaPedidoCadete extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: const Color(0xFF023631),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.25),
@@ -246,10 +246,10 @@ class TarjetaPedidoCadete extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: const Color(0xFF012C28),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                    color: const Color(0xFFE11D48).withValues(alpha: 0.3)),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,7 +271,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
                           style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFFF43F5E)),
+                              color: Color(0xFF34D399)),
                         ),
                     ],
                   ),
@@ -279,7 +279,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.location_on_rounded,
-                          size: 18, color: Color(0xFFF43F5E)),
+                          size: 18, color: Color(0xFF10B981)),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -439,10 +439,10 @@ class TarjetaPedidoCadete extends StatelessWidget {
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: pedido.estado == 'en_cocina'
-                      ? const Color(0xFF10B981)
+                      ? const Color(0xFF028073)
                       : pedido.estado == 'listo'
-                          ? const Color(0xFF3B82F6)
-                          : const Color(0xFFE11D48),
+                          ? const Color(0xFF028073)
+                          : const Color(0xFF10B981),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16)),
