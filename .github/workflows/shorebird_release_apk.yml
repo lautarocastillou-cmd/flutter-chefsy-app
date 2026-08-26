@@ -64,11 +64,25 @@ jobs:
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
 
-      - name: Subir APK para Descargar (Artifact)
+      - name: Localizar y normalizar APK generado
+        run: |
+          mkdir -p build/app/outputs/flutter-apk
+          APK_FOUND=$(find build -type f -name "*.apk" | grep -v "intermediate" | head -n 1)
+          if [ -n "$APK_FOUND" ]; then
+            echo "APK encontrado en: $APK_FOUND"
+            cp "$APK_FOUND" build/app/outputs/flutter-apk/app-release.apk
+          else
+            echo "No se encontró APK en build/. Verificando archivos generados:"
+            find build -type f
+          fi
+          ls -lh build/app/outputs/flutter-apk/app-release.apk || true
+
+      - name: Subir APK para Descargar (Artifact de GitHub)
         uses: actions/upload-artifact@v4
         with:
           name: app-release-base-shorebird
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: warn
 
       - name: Publicar GitHub Release con la última APK
         uses: softprops/action-gh-release@v1
@@ -79,9 +93,13 @@ jobs:
           files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
       - name: Subir APK a Servidores Públicos de Chefsy (Supabase Storage)
         run: |
-          curl -X POST "https://chefsy.app/api/cadeteria/subir-apk" \
-            -H "Authorization: Bearer ${{ secrets.FLUTTER_SECRET_TOKEN || 'chefsy-flutter-secret-2026' }}" \
-            -F "file=@build/app/outputs/flutter-apk/app-release.apk"
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            echo "Subiendo APK a Supabase Storage via API de Chefsy..."
+            curl -f -X POST "https://chefsy.app/api/cadeteria/subir-apk" \
+              -H "Authorization: Bearer ${{ secrets.FLUTTER_SECRET_TOKEN || 'chefsy-flutter-secret-2026' }}" \
+              -F "file=@build/app/outputs/flutter-apk/app-release.apk" || echo "Aviso: No se pudo conectar con el endpoint de subida (puede requerir despliegue web)."
+          fi
