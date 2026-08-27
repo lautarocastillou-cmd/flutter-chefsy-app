@@ -66,4 +66,39 @@ class ApiService {
     } catch (_) {}
     return false;
   }
+
+  // --- Reportar Ubicación y Telemetría ---
+  Future<bool> reportarUbicacion({
+    required String cadeteId,
+    required double lat,
+    required double lng,
+    double accuracy = 5.0,
+    double speed = 0.0,
+    double heading = 0.0,
+    int? batteryLevel,
+    bool gpsActivo = true,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/api/public/ubicacion'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'cadeteId': cadeteId,
+          'lat': lat,
+          'lng': lng,
+          'accuracy': accuracy,
+          'speed': speed,
+          'heading': heading,
+          'gps_activo': gpsActivo,
+          if (batteryLevel != null) 'batteryLevel': batteryLevel,
+        }),
+      ).timeout(const Duration(seconds: 5));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 }

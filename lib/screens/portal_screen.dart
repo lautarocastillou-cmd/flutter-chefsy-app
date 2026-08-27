@@ -201,6 +201,31 @@ class _PortalScreenState extends State<PortalScreen> {
               : 'Transmitiendo GPS...';
         });
       }
+
+      // Disparar reporte HTTP inmediato al servidor para aparecer online en 0 segundos
+      if (_simulacionActiva) {
+        _apiService.reportarUbicacion(
+          cadeteId: widget.cadeteId,
+          lat: _simLat,
+          lng: _simLng,
+          gpsActivo: true,
+        );
+      } else {
+        try {
+          final pos = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getCurrentPosition(
+                desiredAccuracy: LocationAccuracy.medium,
+                timeLimit: const Duration(seconds: 3),
+              );
+          _apiService.reportarUbicacion(
+            cadeteId: widget.cadeteId,
+            lat: pos.latitude,
+            lng: pos.longitude,
+            accuracy: pos.accuracy,
+            gpsActivo: true,
+          );
+        } catch (_) {}
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -387,10 +412,13 @@ class _PortalScreenState extends State<PortalScreen> {
     setState(() {
       _simulacionActiva = activa;
     });
-    // Si ya está rastreando, reiniciamos el servicio para aplicar los cambios de modo
+
     if (_estaRastreando) {
-      await _detenerRastreo();
-      await _iniciarRastreo();
+      FlutterForegroundTask.sendDataToTask(jsonEncode({
+        'simulacion_activa': activa,
+        if (activa) 'sim_lat': _simLat,
+        if (activa) 'sim_lng': _simLng,
+      }));
     }
   }
 
@@ -409,9 +437,21 @@ class _PortalScreenState extends State<PortalScreen> {
       FlutterForegroundTask.sendDataToTask(jsonEncode({
         'sim_lat': lat,
         'sim_lng': lng,
+        'simulacion_activa': true,
       }));
 
-      // 2. Actualizar notificación (opcional visualmente)
+      // 2. Disparar reporte HTTP directo desde UI para respuesta inmediata
+      _apiService.reportarUbicacion(
+        cadeteId: widget.cadeteId,
+        lat: lat,
+        lng: lng,
+        accuracy: 3.0,
+        speed: 20.0,
+        heading: 90.0,
+        gpsActivo: true,
+      );
+
+      // 3. Actualizar notificación visualmente
       await FlutterForegroundTask.updateService(
         notificationTitle: '🛠️ Chefsy GPS (SIMULADO)',
         notificationText:

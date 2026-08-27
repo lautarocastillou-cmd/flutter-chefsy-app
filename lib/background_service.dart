@@ -39,22 +39,12 @@ class GpsTaskHandler extends TaskHandler {
   bool _simulacionActiva = false;
   final Battery _battery = Battery();
 
+  // Última posición válida conocida
+  Position? _ultimaPosicionValida;
+
   // Variables en memoria para joystick en tiempo real
   double? _liveSimLat;
   double? _liveSimLng;
-
-  // --- Lógica de Auto-Pausa en el local ---
-  // Modo pausa: el cadete no se movió, dejamos de reportar al servidor.
-  bool _enModoPausa = false;
-  // Punto donde detectamos que se detuvo.
-  Position? _posicionDetencion;
-  // Marca de tiempo desde cuando está quieto.
-  DateTime? _tiempoDetenido;
-
-  // Umbrales de comportamiento
-  static const double _metrosParaPausarRastreo = 20.0;   // Si se mueve menos de esto → considera que está quieto
-  static const double _metrosParaReanudarRastreo = 15.0;  // Reanuda rápido ante cualquier movimiento
-  static const Duration _tiempoSinMovimientoParaPausar = Duration(minutes: 5); // 5 min de espera quieto antes de pausar
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -62,88 +52,39 @@ class GpsTaskHandler extends TaskHandler {
       _prefs = await SharedPreferences.getInstance();
       _simulacionActiva = _prefs?.getBool('simulacion_activa') ?? false;
 
-      if (!_simulacionActiva) {
-        final modoAhorro = _prefs?.getBool('modo_ahorro') ?? false;
+      // Intentar obtener última posición conocida al arrancar
+      try {
+        _ultimaPosicionValida = await Geolocator.getLastKnownPosition();
+        if (_ultimaPosicionValida != null && !_simulacionActiva) {
+          _enviarUbicacionReal(_ultimaPosicionValida!);
+        }
+      } catch (_) {}
 
-        final positionStream = Geolocator.getPositionStream(
-          locationSettings: LocationSettings(
-            accuracy: modoAhorro ? LocationAccuracy.low : LocationAccuracy.high,
-            distanceFilter: modoAhorro ? 60 : 15,
-          ),
-        );
+      // Iniciar stream de GPS con filtro sensible (5 metros)
+      final positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 5,
+        ),
+      );
 
-        _positionStreamSub = positionStream.listen(
-          (Position position) {
-            _procesarPosicion(position);
-          },
-          onError: (_) {},
-        );
+      _positionStreamSub = positionStream.listen(
+        (Position position) {
+          _procesarPosicion(position);
+        },
+        onError: (_) {},
+      );
+
+      // Si es simulador, disparar primer envío simulado
+      if (_simulacionActiva) {
+        _enviarUbicacionSimulada();
       }
     } catch (_) {}
   }
 
-  /// Evalúa la posición recibida y decide si reportarla o pausar.
   void _procesarPosicion(Position position) {
-    // Si estamos en modo pausa, verificar si el cadete se alejó suficiente para reanudar
-    if (_enModoPausa) {
-      if (_posicionDetencion != null) {
-        final distanciaDesdeDetencion = Geolocator.distanceBetween(
-          _posicionDetencion!.latitude,
-          _posicionDetencion!.longitude,
-          position.latitude,
-          position.longitude,
-        );
-
-        if (distanciaDesdeDetencion >= _metrosParaReanudarRastreo) {
-          // ¡El cadete se movió! Reanudamos el rastreo
-          _enModoPausa = false;
-          _posicionDetencion = null;
-          _tiempoDetenido = null;
-          FlutterForegroundTask.updateService(
-            notificationTitle: '🛵 Chefsy Cadetería',
-            notificationText: 'GPS activo. Transmitiendo ubicación.',
-          );
-          _enviarUbicacionReal(position);
-        }
-        // Si no se alejó suficiente, seguimos en pausa (no reportamos)
-      }
-      return;
-    }
-
-    // --- Modo activo: evaluar si el cadete está quieto ---
-    if (_posicionDetencion != null) {
-      final distanciaActual = Geolocator.distanceBetween(
-        _posicionDetencion!.latitude,
-        _posicionDetencion!.longitude,
-        position.latitude,
-        position.longitude,
-      );
-
-      if (distanciaActual < _metrosParaPausarRastreo) {
-        // Sigue en el mismo lugar, actualizar tiempo
-        _tiempoDetenido ??= DateTime.now();
-        final tiempoQuieto = DateTime.now().difference(_tiempoDetenido!);
-
-        if (tiempoQuieto >= _tiempoSinMovimientoParaPausar) {
-          // Lleva 3+ minutos quieto → pausar reportes
-          _enModoPausa = true;
-          FlutterForegroundTask.updateService(
-            notificationTitle: '🛵 Chefsy — En espera',
-            notificationText: 'GPS pausado. Se reanudará al moverte.',
-          );
-          return;
-        }
-      } else {
-        // Se movió, resetear el contador
-        _posicionDetencion = position;
-        _tiempoDetenido = null;
-      }
-    } else {
-      // Primera posición recibida
-      _posicionDetencion = position;
-    }
-
-    // Reportar normalmente
+    if (_simulacionActiva) return;
+    _ultimaPosicionValida = position;
     _enviarUbicacionReal(position);
   }
 
@@ -152,9 +93,14 @@ class GpsTaskHandler extends TaskHandler {
     if (data is String) {
       try {
         final mapa = jsonDecode(data);
+        if (mapa.containsKey('simulacion_activa')) {
+          _simulacionActiva = mapa['simulacion_activa'] == true;
+        }
         if (mapa['sim_lat'] != null && mapa['sim_lng'] != null) {
           _liveSimLat = (mapa['sim_lat'] as num).toDouble();
           _liveSimLng = (mapa['sim_lng'] as num).toDouble();
+          _simulacionActiva = true;
+          _enviarUbicacionSimulada();
         }
       } catch (_) {}
     }
@@ -162,16 +108,43 @@ class GpsTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
-    // El timer repetitivo solo es necesario para el joystick del simulador.
-    // En modo real, el positionStream gestiona los envíos reactivamente por movimiento para ahorrar batería.
-    final simActiva = _prefs?.getBool('simulacion_activa') ?? false;
-    if (!simActiva) return;
+    final ahora = DateTime.now();
 
+    // 1. MODO SIMULACIÓN: reportar cada 4 segundos la posición del joystick
+    if (_simulacionActiva) {
+      _enviarUbicacionSimulada();
+      return;
+    }
+
+    // 2. MODO REAL: Heartbeat cada 15 segundos si el cadete está quieto
+    // Esto garantiza que Torre de Control SIEMPRE lo mantenga ONLINE y con su batería actualizada
+    final tiempoDesdeUltimoReporte = _ultimoReporteTime == null
+        ? const Duration(seconds: 999)
+        : ahora.difference(_ultimoReporteTime!);
+
+    if (tiempoDesdeUltimoReporte >= const Duration(seconds: 15)) {
+      if (_ultimaPosicionValida != null) {
+        _enviarUbicacionReal(_ultimaPosicionValida!, forzar: true);
+      } else {
+        // Intentar consultar posición actual
+        try {
+          final pos = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getCurrentPosition(
+                desiredAccuracy: LocationAccuracy.medium,
+                timeLimit: const Duration(seconds: 3),
+              );
+          _ultimaPosicionValida = pos;
+          _enviarUbicacionReal(pos, forzar: true);
+        } catch (_) {}
+      }
+    }
+  }
+
+  void _enviarUbicacionSimulada() async {
     if (_ocupado) return;
+    _ocupado = true;
 
     try {
-      _ocupado = true;
-      
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 
@@ -183,6 +156,8 @@ class GpsTaskHandler extends TaskHandler {
         batteryLevel = await _battery.batteryLevel;
       } catch (_) {}
 
+      _ultimoReporteTime = DateTime.now();
+
       await http.post(
         Uri.parse(apiUrl),
         headers: {
@@ -193,9 +168,10 @@ class GpsTaskHandler extends TaskHandler {
           'cadeteId': cadeteId,
           'lat': lat,
           'lng': lng,
-          'accuracy': 5.0,
-          'speed': 25.0,
+          'accuracy': 3.0,
+          'speed': 20.0,
           'heading': 90.0,
+          'gps_activo': true,
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 4));
@@ -205,10 +181,11 @@ class GpsTaskHandler extends TaskHandler {
     }
   }
 
-  void _enviarUbicacionReal(Position position) async {
+  void _enviarUbicacionReal(Position position, {bool forzar = false}) async {
     final ahora = DateTime.now();
-    if (_ultimoReporteTime != null &&
-        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 4)) {
+    if (!forzar &&
+        _ultimoReporteTime != null &&
+        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 3)) {
       return;
     }
     _ultimoReporteTime = ahora;
@@ -219,9 +196,6 @@ class GpsTaskHandler extends TaskHandler {
     try {
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
-
-      // Filtro anti-teletransporte: descartar lecturas con margen de error mayor a 45 metros
-      if (position.accuracy > 45) return;
 
       int? batteryLevel;
       try {
@@ -241,6 +215,7 @@ class GpsTaskHandler extends TaskHandler {
           'accuracy': position.accuracy,
           'speed': position.speed >= 0 ? position.speed : 0,
           'heading': position.heading >= 0 ? position.heading : 0,
+          'gps_activo': true,
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 4));
