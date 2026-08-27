@@ -23,7 +23,7 @@ void initForegroundTask() {
       playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(4000),
+      eventAction: ForegroundTaskEventAction.repeat(4000), // cada 4 seg
       autoRunOnBoot: false,
       allowWakeLock: true,
     ),
@@ -36,11 +36,9 @@ class GpsTaskHandler extends TaskHandler {
   bool _ocupado = false;
   StreamSubscription<Position>? _positionStreamSub;
   DateTime? _ultimoReporteTime;
+  Position? _ultimaPosicionValida;
   bool _simulacionActiva = false;
   final Battery _battery = Battery();
-
-  // Última posición válida conocida
-  Position? _ultimaPosicionValida;
 
   // Variables en memoria para joystick en tiempo real
   double? _liveSimLat;
@@ -52,40 +50,44 @@ class GpsTaskHandler extends TaskHandler {
       _prefs = await SharedPreferences.getInstance();
       _simulacionActiva = _prefs?.getBool('simulacion_activa') ?? false;
 
-      // Intentar obtener última posición conocida al arrancar
-      try {
-        _ultimaPosicionValida = await Geolocator.getLastKnownPosition();
-        if (_ultimaPosicionValida != null && !_simulacionActiva) {
-          _enviarUbicacionReal(_ultimaPosicionValida!);
+      if (!_simulacionActiva) {
+        // 1. Obtener y enviar de inmediato la primera posición y batería
+        try {
+          final initialPos = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+            timeLimit: const Duration(seconds: 4),
+          );
+          _ultimaPosicionValida = initialPos;
+          _enviarUbicacionReal(initialPos);
+        } catch (_) {
+          try {
+            final lastKnown = await Geolocator.getLastKnownPosition();
+            if (lastKnown != null) {
+              _ultimaPosicionValida = lastKnown;
+              _enviarUbicacionReal(lastKnown);
+            }
+          } catch (_) {}
         }
-      } catch (_) {}
 
-      // Iniciar stream de GPS con filtro sensible (5 metros)
-      final positionStream = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-        ),
-      );
+        // 2. Escuchar cambios continuos de posición con filtro sensible
+        final positionStream = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          ),
+        );
 
-      _positionStreamSub = positionStream.listen(
-        (Position position) {
-          _procesarPosicion(position);
-        },
-        onError: (_) {},
-      );
-
-      // Si es simulador, disparar primer envío simulado
-      if (_simulacionActiva) {
+        _positionStreamSub = positionStream.listen(
+          (Position position) {
+            _ultimaPosicionValida = position;
+            _enviarUbicacionReal(position);
+          },
+          onError: (_) {},
+        );
+      } else {
         _enviarUbicacionSimulada();
       }
     } catch (_) {}
-  }
-
-  void _procesarPosicion(Position position) {
-    if (_simulacionActiva) return;
-    _ultimaPosicionValida = position;
-    _enviarUbicacionReal(position);
   }
 
   @override
@@ -108,34 +110,30 @@ class GpsTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
-    final ahora = DateTime.now();
+    if (_ocupado) return;
 
-    // 1. MODO SIMULACIÓN: reportar cada 4 segundos la posición del joystick
-    if (_simulacionActiva) {
+    final simActiva = _simulacionActiva || (_prefs?.getBool('simulacion_activa') ?? false);
+
+    if (simActiva) {
       _enviarUbicacionSimulada();
-      return;
-    }
-
-    // 2. MODO REAL: Heartbeat cada 15 segundos si el cadete está quieto
-    // Esto garantiza que Torre de Control SIEMPRE lo mantenga ONLINE y con su batería actualizada
-    final tiempoDesdeUltimoReporte = _ultimoReporteTime == null
-        ? const Duration(seconds: 999)
-        : ahora.difference(_ultimoReporteTime!);
-
-    if (tiempoDesdeUltimoReporte >= const Duration(seconds: 15)) {
-      if (_ultimaPosicionValida != null) {
-        _enviarUbicacionReal(_ultimaPosicionValida!, forzar: true);
-      } else {
-        // Intentar consultar posición actual
-        try {
-          final pos = await Geolocator.getLastKnownPosition() ??
-              await Geolocator.getCurrentPosition(
-                desiredAccuracy: LocationAccuracy.medium,
-                timeLimit: const Duration(seconds: 3),
-              );
-          _ultimaPosicionValida = pos;
-          _enviarUbicacionReal(pos, forzar: true);
-        } catch (_) {}
+    } else {
+      // Modo Real: Heartbeat periódico cada 15 segundos si está quieto en el local
+      final ahora = DateTime.now();
+      if (_ultimoReporteTime == null ||
+          ahora.difference(_ultimoReporteTime!) >= const Duration(seconds: 15)) {
+        if (_ultimaPosicionValida != null) {
+          _enviarUbicacionReal(_ultimaPosicionValida!, forzar: true);
+        } else {
+          try {
+            final pos = await Geolocator.getLastKnownPosition() ??
+                await Geolocator.getCurrentPosition(
+                  desiredAccuracy: LocationAccuracy.medium,
+                  timeLimit: const Duration(seconds: 3),
+                );
+            _ultimaPosicionValida = pos;
+            _enviarUbicacionReal(pos, forzar: true);
+          } catch (_) {}
+        }
       }
     }
   }
@@ -145,6 +143,7 @@ class GpsTaskHandler extends TaskHandler {
     _ocupado = true;
 
     try {
+      _prefs ??= await SharedPreferences.getInstance();
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 
@@ -168,10 +167,9 @@ class GpsTaskHandler extends TaskHandler {
           'cadeteId': cadeteId,
           'lat': lat,
           'lng': lng,
-          'accuracy': 3.0,
-          'speed': 20.0,
+          'accuracy': 5.0,
+          'speed': 25.0,
           'heading': 90.0,
-          'gps_activo': true,
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 4));
@@ -194,6 +192,7 @@ class GpsTaskHandler extends TaskHandler {
     _ocupado = true;
 
     try {
+      _prefs ??= await SharedPreferences.getInstance();
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 
@@ -231,19 +230,29 @@ class GpsTaskHandler extends TaskHandler {
   }
 }
 
-/// Envía inmediatamente la ubicación GPS actual al servidor.
-/// Útil al presionar "COMENZAR VIAJE" para que los clientes vean el mapa al instante.
-Future<bool> reportarUbicacionAhora() async {
+/// Envía inmediatamente la ubicación GPS actual y batería al servidor.
+Future<bool> reportarUbicacionAhora([String? idCadete]) async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    final cadeteId = prefs.getString('cadete_id');
+    final cadeteId = idCadete ?? prefs.getString('cadete_id');
     if (cadeteId == null || cadeteId.isEmpty) return false;
 
-    final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+    Position? position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 4),
+      );
+    } catch (_) {
+      position = await Geolocator.getLastKnownPosition();
+    }
 
-    if (position.accuracy > 45) return false;
+    if (position == null) return false;
+
+    int? batteryLevel;
+    try {
+      batteryLevel = await Battery().batteryLevel;
+    } catch (_) {}
 
     final res = await http.post(
       Uri.parse(apiUrl),
@@ -258,6 +267,7 @@ Future<bool> reportarUbicacionAhora() async {
         'accuracy': position.accuracy,
         'speed': position.speed >= 0 ? position.speed : 0,
         'heading': position.heading >= 0 ? position.heading : 0,
+        if (batteryLevel != null) 'batteryLevel': batteryLevel,
       }),
     ).timeout(const Duration(seconds: 5));
 

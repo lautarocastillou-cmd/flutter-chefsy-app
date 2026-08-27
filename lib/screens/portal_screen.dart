@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -91,6 +90,7 @@ class _PortalScreenState extends State<PortalScreen> {
     final simCoords = await _authService.obtenerSimCoordenadas();
     final prefs = await SharedPreferences.getInstance();
     _prefs = prefs;
+    await prefs.setString('cadete_id', widget.cadeteId);
 
     setState(() {
       _estaRastreando = isRunning;
@@ -183,6 +183,7 @@ class _PortalScreenState extends State<PortalScreen> {
     }
 
     try {
+      await _prefs?.setString('cadete_id', widget.cadeteId);
       await FlutterForegroundTask.startService(
         serviceId: 888,
         notificationTitle: _simulacionActiva
@@ -193,6 +194,12 @@ class _PortalScreenState extends State<PortalScreen> {
             : 'GPS activo. Podés guardar el celular en el bolsillo.',
         callback: startCallback,
       );
+
+      // Reporte inicial inmediato
+      if (!_simulacionActiva) {
+        reportarUbicacionAhora(widget.cadeteId);
+      }
+
       if (mounted) {
         setState(() {
           _estaRastreando = true;

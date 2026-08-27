@@ -22,6 +22,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.29.0'
           channel: 'stable'
 
       - name: Setup Shorebird
@@ -40,6 +41,6 @@ jobs:
           flutter pub get
 
       - name: Enviar Parche con Shorebird
-        run: shorebird patch android --flutter-version=3.29.0 -- --android-skip-build-dependency-validation
+        run: shorebird patch android --allow-asset-diffs --allow-native-diffs
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
