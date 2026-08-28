@@ -13,14 +13,16 @@ void initForegroundTask() {
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'chefsy_gps_tracking',
-      channelName: 'Rastreo GPS Chefsy',
-      channelDescription: 'GPS activo. Podés guardar el celular en el bolsillo.',
-      channelImportance: NotificationChannelImportance.LOW,
-      priority: NotificationPriority.LOW,
+      channelName: 'Rastreo y Pedidos Chefsy',
+      channelDescription: 'Avisos de nuevos pedidos y GPS activo.',
+      channelImportance: NotificationChannelImportance.HIGH,
+      priority: NotificationPriority.HIGH,
+      playSound: true,
+      enableVibration: true,
     ),
     iosNotificationOptions: const IOSNotificationOptions(
       showNotification: true,
-      playSound: false,
+      playSound: true,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
       eventAction: ForegroundTaskEventAction.repeat(4000), // cada 4 seg
@@ -44,11 +46,18 @@ class GpsTaskHandler extends TaskHandler {
   double? _liveSimLat;
   double? _liveSimLng;
 
+  // Control de pedidos en segundo plano
+  int _ticksChequeoPedidos = 0;
+  Set<String> _pedidosConocidosIds = {};
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     try {
       _prefs = await SharedPreferences.getInstance();
       _simulacionActiva = _prefs?.getBool('simulacion_activa') ?? false;
+
+      // Cargar lista inicial de pedidos para no notificar pedidos ya existentes al abrir
+      _verificarNuevosPedidosEnSegundoPlano(esInicial: true);
 
       if (!_simulacionActiva) {
         // 1. Obtener y enviar de inmediato la primera posición y batería
@@ -90,6 +99,42 @@ class GpsTaskHandler extends TaskHandler {
     } catch (_) {}
   }
 
+  /// Verifica si hay pedidos recién asignados mientras la app corre en segundo plano
+  Future<void> _verificarNuevosPedidosEnSegundoPlano({bool esInicial = false}) async {
+    try {
+      final cadeteId = _prefs?.getString('cadete_id');
+      if (cadeteId == null || cadeteId.isEmpty) return;
+
+      final res = await http.get(
+        Uri.parse('https://chefsy.xyz/api/public/pedidos?cadeteId=$cadeteId'),
+        headers: {'Authorization': 'Bearer $secretToken'},
+      ).timeout(const Duration(seconds: 5));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final list = (data['pedidos'] as List? ?? [])
+            .where((p) => p['estado'] != 'entregado' && p['estado'] != 'cancelado')
+            .toList();
+
+        final currentIds = list.map((p) => p['id'].toString()).toSet();
+
+        if (!esInicial && _pedidosConocidosIds.isNotEmpty) {
+          final nuevos = list.where((p) => !_pedidosConocidosIds.contains(p['id'].toString())).toList();
+          if (nuevos.isNotEmpty) {
+            final nuevo = nuevos.first;
+            final cliente = nuevo['cliente']?.toString() ?? 'Cliente';
+            final dir = nuevo['direccion']?.toString() ?? 'Domicilio';
+            
+            FlutterForegroundTask.updateService(
+              notificationTitle: '🛵 ¡Nuevo pedido asignado!',
+              notificationText: '$cliente • $dir',
+            );
+          }
+        }
+        _pedidosConocidosIds = currentIds;
+      }
+    } catch (_) {}
+  }
   @override
   void onReceiveData(Object data) {
     if (data is String) {
@@ -110,6 +155,13 @@ class GpsTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
+    // 1. Chequeo de nuevos pedidos asignados cada ~8 segundos (2 ticks)
+    _ticksChequeoPedidos++;
+    if (_ticksChequeoPedidos >= 2) {
+      _ticksChequeoPedidos = 0;
+      _verificarNuevosPedidosEnSegundoPlano();
+    }
+
     if (_ocupado) return;
 
     final simActiva = _simulacionActiva || (_prefs?.getBool('simulacion_activa') ?? false);

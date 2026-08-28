@@ -317,11 +317,36 @@ class _PortalScreenState extends State<PortalScreen> {
         final esCambioLocalReciente =
             (DateTime.now().millisecondsSinceEpoch - _ultimoCambioLocalMs) < 6000;
         if (!esCambioLocalReciente) {
-          final oldActivos =
-              _pedidosListos.where((p) => p.estado != 'entregado').length;
-          final newActivos = list.where((p) => p.estado != 'entregado').length;
-          if (newActivos > oldActivos) {
+          final oldIds = _pedidosListos.map((p) => p.id).toSet();
+          final nuevos = list.where((p) => p.estado != 'entregado' && !oldIds.contains(p.id)).toList();
+          if (_pedidosListos.isNotEmpty && nuevos.isNotEmpty) {
             SystemSound.play(SystemSoundType.alert);
+            HapticFeedback.heavyImpact();
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.delivery_dining, color: Colors.white, size: 28),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('🛵 ¡Nuevo Pedido Asignado!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text('${nuevos.first.cliente} • ${nuevos.first.direccion}', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF059669),
+                duration: const Duration(seconds: 5),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            );
           }
         }
       }
