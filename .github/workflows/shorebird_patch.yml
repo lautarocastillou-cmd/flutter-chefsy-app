@@ -19,18 +19,30 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.0'
+          channel: 'stable'
+
       - name: Setup Shorebird
         uses: shorebirdtech/setup-shorebird@v1
         with:
           cache: true
 
+      - name: Generate local.properties for Android SDK
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          echo "flutter.sdk=$(dirname $(dirname $(which flutter)))" >> android/local.properties
+          cat android/local.properties
+
       - name: Get Dependencies
         run: |
           chmod +x android/gradlew
-          shorebird flutter pub get
+          flutter pub get
 
       - name: Enviar Parche con Shorebird
         run: |
-          shorebird patch android --release-version=latest --allow-asset-diffs --allow-native-diffs
+          shorebird patch android --allow-asset-diffs --allow-native-diffs
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
