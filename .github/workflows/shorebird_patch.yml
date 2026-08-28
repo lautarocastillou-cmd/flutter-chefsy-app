@@ -42,6 +42,6 @@ jobs:
 
       - name: Enviar Parche con Shorebird
         run: |
-          shorebird patch android --flutter-version=3.29.0 --allow-asset-diffs --allow-native-diffs --verbose
+          shorebird patch android --release-version=latest --allow-asset-diffs --allow-native-diffs --verbose
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
