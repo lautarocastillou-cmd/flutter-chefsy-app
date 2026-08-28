@@ -41,6 +41,7 @@ jobs:
           flutter pub get
 
       - name: Enviar Parche con Shorebird
-        run: shorebird patch android --release-version=latest --allow-asset-diffs --allow-native-diffs -- --android-skip-build-dependency-validation
+        run: |
+          shorebird patch android --flutter-version=3.29.0 --allow-asset-diffs --allow-native-diffs --verbose
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
