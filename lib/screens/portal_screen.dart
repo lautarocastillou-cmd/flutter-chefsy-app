@@ -125,6 +125,24 @@ class _PortalScreenState extends State<PortalScreen> {
     );
   }
 
+  Future<void> _aplicarActualizacionYReiniciar() async {
+    try {
+      // 1. Detener servicio en segundo plano para permitir que Android destruya el proceso anterior
+      if (await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.stopService();
+      }
+      await Future.delayed(const Duration(milliseconds: 250));
+
+      // 2. Reiniciar proceso nativo para cargar el nuevo parche de Shorebird
+      final ok = await Restart.restartApp();
+      if (!ok) {
+        SystemNavigator.pop();
+      }
+    } catch (_) {
+      SystemNavigator.pop();
+    }
+  }
+
   Future<void> _toggleAlertas() async {
     final nuevo = !_alertasSonoras;
     await _prefs?.setBool('alertas_sonoras', nuevo);
@@ -752,17 +770,7 @@ class _PortalScreenState extends State<PortalScreen> {
                           ),
                           if (_listoParaReiniciar)
                             ElevatedButton(
-                              onPressed: () async {
-                                try {
-                                  await Restart.restartApp();
-                                } catch (_) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Por favor, cerrá y volvé a abrir la app.')),
-                                  );
-                                }
-                              },
+                              onPressed: _aplicarActualizacionYReiniciar,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: const Color(0xFF10B981),
