@@ -357,6 +357,34 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   Future<void> _cambiarEstadoPedido(String id, String nuevoEstado) async {
+    if (!_estaRastreando) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.location_off_rounded, color: Colors.white, size: 22),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text('⚠️ Debes activar el GPS para operar con este pedido.',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          action: SnackBarAction(
+            label: 'ACTIVAR',
+            textColor: Colors.white,
+            onPressed: _iniciarRastreo,
+          ),
+        ),
+      );
+      return;
+    }
+
     if (_cambiandoEstadoIds.contains(id)) return;
 
     setState(() {
@@ -836,6 +864,65 @@ class _PortalScreenState extends State<PortalScreen> {
                       ),
                     ),
                   ),
+
+                  // Banner de Aviso: Fuera de Turno (GPS Inactivo)
+                  if (!_estaRastreando)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFF87171), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.location_off_rounded,
+                                color: Color(0xFFDC2626), size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'ESTÁS FUERA DE TURNO (GPS APAGADO)',
+                                  style: TextStyle(
+                                    color: Color(0xFF991B1B),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 12,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  'El local no podrá asignarte pedidos hasta que actives el interruptor de rastreo superior.',
+                                  style: TextStyle(
+                                    color: Color(0xFFB91C1C),
+                                    fontSize: 11,
+                                    height: 1.3,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                 // Panel de Simulación (si está activo)
                 if (_mostrarControlesSimulacion) ...[
