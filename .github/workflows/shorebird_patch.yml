@@ -43,6 +43,6 @@ jobs:
 
       - name: Enviar Parche con Shorebird
         run: |
-          shorebird patch android --allow-asset-diffs --allow-native-diffs
+          shorebird patch android --allow-asset-diffs --allow-native-diffs -- --android-skip-build-dependency-validation
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
