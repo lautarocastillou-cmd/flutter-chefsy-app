@@ -134,10 +134,7 @@ class _PortalScreenState extends State<PortalScreen> {
       await Future.delayed(const Duration(milliseconds: 250));
 
       // 2. Reiniciar proceso nativo para cargar el nuevo parche de Shorebird
-      final ok = await Restart.restartApp();
-      if (!ok) {
-        SystemNavigator.pop();
-      }
+      await Restart.restartApp();
     } catch (_) {
       SystemNavigator.pop();
     }
