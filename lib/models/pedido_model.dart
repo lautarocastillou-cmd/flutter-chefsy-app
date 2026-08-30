@@ -79,7 +79,9 @@ class PedidoModel {
       total: double.tryParse(json['total']?.toString() ?? '0') ?? 0.0,
       costoEnvio: json['costoEnvio'] != null
           ? double.tryParse(json['costoEnvio'].toString())
-          : null,
+          : (json['costo_envio'] != null
+              ? double.tryParse(json['costo_envio'].toString())
+              : null),
       metodoPago: json['metodoPago']?.toString() ?? '',
       pagoConfirmado: json['pago_confirmado'] == true,
       observaciones: json['observaciones']?.toString() ?? '',

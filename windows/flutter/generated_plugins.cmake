@@ -3,8 +3,10 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
   battery_plus
   geolocator_windows
+  restart_app
   url_launcher_windows
 )
 
