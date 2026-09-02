@@ -42,6 +42,8 @@ class ApiService {
         final data = jsonDecode(res.body);
         final listPedidos = data['pedidos'] as List? ?? [];
         final listExtras = data['pagos_extras'] as List? ?? [];
+        final montoBase = double.tryParse(data['monto_base']?.toString() ?? '0') ?? 0.0;
+        final turnoActivo = data['turno_activo'] == true;
         return {
           'pedidos': listPedidos
               .map((p) => PedidoModel.fromJson(Map<String, dynamic>.from(p)))
@@ -49,12 +51,16 @@ class ApiService {
           'pagos_extras': listExtras
               .map((e) => PagoExtraModel.fromJson(Map<String, dynamic>.from(e)))
               .toList(),
+          'monto_base': montoBase,
+          'turno_activo': turnoActivo,
         };
       }
     } catch (_) {}
     return {
       'pedidos': <PedidoModel>[],
       'pagos_extras': <PagoExtraModel>[],
+      'monto_base': 0.0,
+      'turno_activo': false,
     };
   }
 

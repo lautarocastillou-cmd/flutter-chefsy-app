@@ -42,6 +42,9 @@ class _PortalScreenState extends State<PortalScreen> {
   Timer? _pollingTimer;
   RealtimeChannel? _pedidosChannel;
   RealtimeChannel? _extrasChannel;
+  RealtimeChannel? _turnosChannel;
+  double _montoBase = 0.0;
+  bool _turnoActivo = false;
   bool _mostrarControlesSimulacion = false;
   bool _simulacionActiva = false;
   double _simLat = -28.46281; // Coordenadas reales del local Chefsy
@@ -108,6 +111,16 @@ class _PortalScreenState extends State<PortalScreen> {
               _fetchPedidosSilencioso();
             })
         .subscribe();
+    _turnosChannel = Supabase.instance.client
+        .channel('public:turnos:cadete_${widget.cadeteId}')
+        .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'turnos',
+            callback: (payload) {
+              _fetchPedidosSilencioso();
+            })
+        .subscribe();
   }
 
   @override
@@ -115,6 +128,7 @@ class _PortalScreenState extends State<PortalScreen> {
     _pollingTimer?.cancel();
     _pedidosChannel?.unsubscribe();
     _extrasChannel?.unsubscribe();
+    _turnosChannel?.unsubscribe();
     _joystickTimer?.cancel();
     super.dispose();
   }
@@ -357,6 +371,8 @@ class _PortalScreenState extends State<PortalScreen> {
       setState(() {
         _pedidosListos = datos['pedidos'] as List<PedidoModel>;
         _pagosExtras = datos['pagos_extras'] as List<PagoExtraModel>;
+        _montoBase = datos['monto_base'] as double? ?? 0.0;
+        _turnoActivo = datos['turno_activo'] as bool? ?? false;
         _cargandoPedidos = false;
       });
     }
@@ -366,6 +382,8 @@ class _PortalScreenState extends State<PortalScreen> {
     final datos = await _apiService.fetchDatosTurno(widget.cadeteId);
     final list = datos['pedidos'] as List<PedidoModel>;
     final extras = datos['pagos_extras'] as List<PagoExtraModel>;
+    final montoBase = datos['monto_base'] as double? ?? 0.0;
+    final turnoActivo = datos['turno_activo'] as bool? ?? false;
     if (mounted) {
       if (_alertasSonoras) {
         final esCambioLocalReciente =
@@ -408,6 +426,8 @@ class _PortalScreenState extends State<PortalScreen> {
       setState(() {
         _pedidosListos = list;
         _pagosExtras = extras;
+        _montoBase = montoBase;
+        _turnoActivo = turnoActivo;
         if (!isRunning && _estaRastreando) {
           _estaRastreando = false;
           _ultimaUbicacionTexto = 'Rastreo pausado.';
@@ -1172,7 +1192,7 @@ class _PortalScreenState extends State<PortalScreen> {
                       0.0,
                       (acc, e) => acc + e.monto,
                     );
-                    final totalGenerado = totalRecaudadoViajes + totalExtras;
+                    final totalGenerado = totalRecaudadoViajes + totalExtras + _montoBase;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -1232,9 +1252,9 @@ class _PortalScreenState extends State<PortalScreen> {
                                   color: Colors.white.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Text(
-                                  'EN VIVO',
-                                  style: TextStyle(
+                                child: Text(
+                                  _turnoActivo ? 'TURNO ACTIVO' : 'EN VIVO',
+                                  style: const TextStyle(
                                     fontSize: 9,
                                     fontWeight: FontWeight.w800,
                                     color: Color(0xFF34D399),
@@ -1308,7 +1328,7 @@ class _PortalScreenState extends State<PortalScreen> {
                               ),
                               const SizedBox(width: 8),
 
-                              // Card 2: Total Generado en Envíos + Extras
+                              // Card 2: Total a Cobrar (Base + Envíos + Extras)
                               Expanded(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -1334,7 +1354,7 @@ class _PortalScreenState extends State<PortalScreen> {
                                           ),
                                           const SizedBox(width: 4),
                                           const Text(
-                                            'TOTAL GENERADO',
+                                            'TOTAL A COBRAR',
                                             style: TextStyle(
                                               fontSize: 9,
                                               fontWeight: FontWeight.w800,
@@ -1356,9 +1376,13 @@ class _PortalScreenState extends State<PortalScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        cantidadExtras > 0
-                                            ? 'Envíos + viajes extras'
-                                            : 'Por costo de envíos',
+                                        _montoBase > 0 &&
+                                                (cantidadViajesPedidos > 0 ||
+                                                    cantidadExtras > 0)
+                                            ? 'Base + viajes${cantidadExtras > 0 ? " + extras" : ""}'
+                                            : (_montoBase > 0
+                                                ? 'Base inicial del turno'
+                                                : 'Por costo de envíos'),
                                         style: const TextStyle(
                                           fontSize: 10,
                                           color: Colors.white54,
@@ -1372,48 +1396,141 @@ class _PortalScreenState extends State<PortalScreen> {
                             ],
                           ),
 
-                          // Chip destacado si tiene extras agregados
-                          if (cantidadExtras > 0) ...[
+                          // Desglose transparente del turno (Base, Envíos, Extras)
+                          if (_montoBase > 0 || cantidadExtras > 0) ...[
                             const SizedBox(height: 10),
-                            GestureDetector(
-                              onTap: () => setState(() => _vistaActiva = 'extras'),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 7),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981)
-                                      .withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: const Color(0xFF34D399)
-                                        .withValues(alpha: 0.35),
-                                  ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF012421),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
                                 ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.stars_rounded,
-                                        size: 16, color: Color(0xFF34D399)),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        '⭐ $cantidadExtras ${cantidadExtras == 1 ? "viaje extra" : "viajes extras"} (+${PagoExtraModel.formatearPrecio(totalExtras)})',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w800,
-                                          color: Color(0xFF34D399),
+                              ),
+                              child: Column(
+                                children: [
+                                  if (_montoBase > 0)
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Row(
+                                          children: [
+                                            Icon(
+                                              Icons.account_balance_wallet_rounded,
+                                              size: 13,
+                                              color: Color(0xFFFBBF24),
+                                            ),
+                                            SizedBox(width: 5),
+                                            Text(
+                                              'Base fija del turno:',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.white70,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ),
+                                        Text(
+                                          '+${PedidoModel.formatearPrecio(_montoBase)}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFFFBBF24),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const Text(
-                                      'Ver pestaña Extras →',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white70,
+                                  if (cantidadViajesPedidos > 0) ...[
+                                    if (_montoBase > 0) const SizedBox(height: 5),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.delivery_dining_rounded,
+                                              size: 13,
+                                              color: Colors.blue.shade300,
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Envíos entregados ($cantidadViajesPedidos):',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.white70,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Text(
+                                          '+${PedidoModel.formatearPrecio(totalRecaudadoViajes)}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w900,
+                                            color: Colors.blue.shade300,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                  if (cantidadExtras > 0) ...[
+                                    if (_montoBase > 0 ||
+                                        cantidadViajesPedidos > 0)
+                                      const SizedBox(height: 5),
+                                    GestureDetector(
+                                      onTap: () => setState(
+                                          () => _vistaActiva = 'extras'),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.stars_rounded,
+                                                size: 13,
+                                                color: Color(0xFF34D399),
+                                              ),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                'Viajes extras ($cantidadExtras):',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFF34D399),
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                '+${PagoExtraModel.formatearPrecio(totalExtras)}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: Color(0xFF34D399),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              const Icon(
+                                                Icons.chevron_right_rounded,
+                                                size: 14,
+                                                color: Color(0xFF34D399),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
-                                ),
+                                ],
                               ),
                             ),
                           ],
