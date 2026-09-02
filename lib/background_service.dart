@@ -253,7 +253,7 @@ class GpsTaskHandler extends TaskHandler {
         batteryLevel = await _battery.batteryLevel;
       } catch (_) {}
 
-      await http.post(
+      final response = await http.post(
         Uri.parse(apiUrl),
         headers: {
           'Content-Type': 'application/json',
@@ -270,6 +270,14 @@ class GpsTaskHandler extends TaskHandler {
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['comando'] == 'apagar_gps' || data['gps_activo'] == false) {
+          FlutterForegroundTask.sendDataToMain('apagar_gps');
+          await FlutterForegroundTask.stopService();
+        }
+      }
     } catch (_) {
     } finally {
       _ocupado = false;

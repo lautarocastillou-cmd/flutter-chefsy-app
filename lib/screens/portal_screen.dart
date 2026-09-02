@@ -8,9 +8,11 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/pedido_model.dart';
+import '../models/pago_extra_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/tarjeta_pedido.dart';
+import '../widgets/tarjeta_pago_extra.dart';
 import '../background_service.dart';
 import '../services/updater_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,15 +36,16 @@ class PortalScreen extends StatefulWidget {
 class _PortalScreenState extends State<PortalScreen> {
   bool _estaRastreando = false;
   List<PedidoModel> _pedidosListos = [];
+  List<PagoExtraModel> _pagosExtras = [];
   bool _cargandoPedidos = false;
   String _ultimaUbicacionTexto = 'Esperando señal GPS...';
   Timer? _pollingTimer;
   RealtimeChannel? _pedidosChannel;
+  RealtimeChannel? _extrasChannel;
   bool _mostrarControlesSimulacion = false;
   bool _simulacionActiva = false;
   double _simLat = -28.46281; // Coordenadas reales del local Chefsy
   double _simLng = -65.77850;
-  bool _modoAhorro = false;
   Timer? _joystickTimer;
   String _vistaActiva = 'activos';
   bool _alertasSonoras = true;
@@ -62,6 +65,27 @@ class _PortalScreenState extends State<PortalScreen> {
   void initState() {
     super.initState();
     _cargarDatos();
+
+    // Escuchar órdenes de segundo plano (ej: kill switch de Torre de Control)
+    FlutterForegroundTask.addTaskDataCallback((data) {
+      if (data == 'apagar_gps') {
+        if (mounted) {
+          setState(() {
+            _estaRastreando = false;
+            _ultimaUbicacionTexto = 'GPS desconectado por Torre de Control.';
+          });
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🛑 Tu GPS fue desconectado por Torre de Control.'),
+              backgroundColor: Colors.redAccent,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
+
     _pollingTimer = Timer.periodic(
         const Duration(seconds: 15), (_) => _fetchPedidosSilencioso());
     _pedidosChannel = Supabase.instance.client
@@ -74,12 +98,23 @@ class _PortalScreenState extends State<PortalScreen> {
               _fetchPedidosSilencioso();
             })
         .subscribe();
+    _extrasChannel = Supabase.instance.client
+        .channel('public:extras:cadete_${widget.cadeteId}')
+        .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'cadetes_pagos_extras',
+            callback: (payload) {
+              _fetchPedidosSilencioso();
+            })
+        .subscribe();
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
     _pedidosChannel?.unsubscribe();
+    _extrasChannel?.unsubscribe();
     _joystickTimer?.cancel();
     super.dispose();
   }
@@ -95,7 +130,6 @@ class _PortalScreenState extends State<PortalScreen> {
     setState(() {
       _estaRastreando = isRunning;
       _simulacionActiva = simActiva;
-      _modoAhorro = prefs.getBool('modo_ahorro') ?? false;
       _alertasSonoras = true;
       _simLat = simCoords['lat']!;
       _simLng = simCoords['lng']!;
@@ -231,6 +265,7 @@ class _PortalScreenState extends State<PortalScreen> {
           lat: _simLat,
           lng: _simLng,
           gpsActivo: true,
+          iniciarGpsManual: true,
         );
       } else {
         try {
@@ -245,6 +280,7 @@ class _PortalScreenState extends State<PortalScreen> {
             lng: pos.longitude,
             accuracy: pos.accuracy,
             gpsActivo: true,
+            iniciarGpsManual: true,
           );
         } catch (_) {}
       }
@@ -316,17 +352,20 @@ class _PortalScreenState extends State<PortalScreen> {
 
   Future<void> _fetchPedidos() async {
     setState(() => _cargandoPedidos = true);
-    final list = await _apiService.fetchPedidos(widget.cadeteId);
+    final datos = await _apiService.fetchDatosTurno(widget.cadeteId);
     if (mounted) {
       setState(() {
-        _pedidosListos = list;
+        _pedidosListos = datos['pedidos'] as List<PedidoModel>;
+        _pagosExtras = datos['pagos_extras'] as List<PagoExtraModel>;
         _cargandoPedidos = false;
       });
     }
   }
 
   Future<void> _fetchPedidosSilencioso() async {
-    final list = await _apiService.fetchPedidos(widget.cadeteId);
+    final datos = await _apiService.fetchDatosTurno(widget.cadeteId);
+    final list = datos['pedidos'] as List<PedidoModel>;
+    final extras = datos['pagos_extras'] as List<PagoExtraModel>;
     if (mounted) {
       if (_alertasSonoras) {
         final esCambioLocalReciente =
@@ -365,8 +404,14 @@ class _PortalScreenState extends State<PortalScreen> {
           }
         }
       }
+      final isRunning = await FlutterForegroundTask.isRunningService;
       setState(() {
         _pedidosListos = list;
+        _pagosExtras = extras;
+        if (!isRunning && _estaRastreando) {
+          _estaRastreando = false;
+          _ultimaUbicacionTexto = 'Rastreo pausado.';
+        }
       });
     }
   }
@@ -681,11 +726,31 @@ class _PortalScreenState extends State<PortalScreen> {
                           ],
                         ),
                       ),
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(Icons.refresh_rounded, size: 22, color: Colors.white),
-                        onPressed: _fetchPedidos,
+                      Row(
+                        children: [
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: Icon(
+                              _alertasSonoras
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_off_rounded,
+                              size: 20,
+                              color: _alertasSonoras
+                                  ? const Color(0xFF34D399)
+                                  : Colors.white38,
+                            ),
+                            onPressed: _toggleAlertas,
+                          ),
+                          const SizedBox(width: 14),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.refresh_rounded,
+                                size: 22, color: Colors.white),
+                            onPressed: _fetchPedidos,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -846,7 +911,7 @@ class _PortalScreenState extends State<PortalScreen> {
                                 const SizedBox(height: 2),
                                 Text(
                                   _estaRastreando
-                                      ? 'La Torre de Control te ve en vivo. Podés bloquear la pantalla.'
+                                      ? 'Torre de Control en vivo • $_ultimaUbicacionTexto'
                                       : 'Tocá para iniciar tu turno y compartir ubicación.',
                                   style: TextStyle(
                                     fontSize: 11,
@@ -1095,11 +1160,19 @@ class _PortalScreenState extends State<PortalScreen> {
                     final entregados = _pedidosListos
                         .where((p) => p.estado == 'entregado')
                         .toList();
-                    final cantidadViajes = entregados.length;
+                    final cantidadViajesPedidos = entregados.length;
+                    final cantidadExtras = _pagosExtras.length;
+                    final totalViajes = cantidadViajesPedidos + cantidadExtras;
+
                     final totalRecaudadoViajes = entregados.fold<double>(
                       0.0,
                       (acc, p) => acc + (p.costoEnvio ?? 0.0),
                     );
+                    final totalExtras = _pagosExtras.fold<double>(
+                      0.0,
+                      (acc, e) => acc + e.monto,
+                    );
+                    final totalGenerado = totalRecaudadoViajes + totalExtras;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -1173,7 +1246,7 @@ class _PortalScreenState extends State<PortalScreen> {
                           const SizedBox(height: 12),
                           Row(
                             children: [
-                              // Card 1: Viajes Realizados
+                              // Card 1: Viajes Totales (Pedidos + Extras)
                               Expanded(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -1211,7 +1284,7 @@ class _PortalScreenState extends State<PortalScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        '$cantidadViajes ${cantidadViajes == 1 ? 'viaje' : 'viajes'}',
+                                        '$totalViajes ${totalViajes == 1 ? 'viaje' : 'viajes'}',
                                         style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w900,
@@ -1219,9 +1292,11 @@ class _PortalScreenState extends State<PortalScreen> {
                                         ),
                                       ),
                                       const SizedBox(height: 2),
-                                      const Text(
-                                        'Entregas hechas',
-                                        style: TextStyle(
+                                      Text(
+                                        cantidadExtras > 0
+                                            ? '$cantidadViajesPedidos envíos • $cantidadExtras extra${cantidadExtras == 1 ? "" : "s"}'
+                                            : 'Entregas hechas',
+                                        style: const TextStyle(
                                           fontSize: 10,
                                           color: Colors.white54,
                                           fontWeight: FontWeight.w500,
@@ -1233,7 +1308,7 @@ class _PortalScreenState extends State<PortalScreen> {
                               ),
                               const SizedBox(width: 8),
 
-                              // Card 2: Total Generado en Envíos
+                              // Card 2: Total Generado en Envíos + Extras
                               Expanded(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -1272,7 +1347,7 @@ class _PortalScreenState extends State<PortalScreen> {
                                       const SizedBox(height: 4),
                                       Text(
                                         PedidoModel.formatearPrecio(
-                                            totalRecaudadoViajes),
+                                            totalGenerado),
                                         style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w900,
@@ -1280,9 +1355,11 @@ class _PortalScreenState extends State<PortalScreen> {
                                         ),
                                       ),
                                       const SizedBox(height: 2),
-                                      const Text(
-                                        'Por costo de envíos',
-                                        style: TextStyle(
+                                      Text(
+                                        cantidadExtras > 0
+                                            ? 'Envíos + viajes extras'
+                                            : 'Por costo de envíos',
+                                        style: const TextStyle(
                                           fontSize: 10,
                                           color: Colors.white54,
                                           fontWeight: FontWeight.w500,
@@ -1294,6 +1371,52 @@ class _PortalScreenState extends State<PortalScreen> {
                               ),
                             ],
                           ),
+
+                          // Chip destacado si tiene extras agregados
+                          if (cantidadExtras > 0) ...[
+                            const SizedBox(height: 10),
+                            GestureDetector(
+                              onTap: () => setState(() => _vistaActiva = 'extras'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFF34D399)
+                                        .withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.stars_rounded,
+                                        size: 16, color: Color(0xFF34D399)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '⭐ $cantidadExtras ${cantidadExtras == 1 ? "viaje extra" : "viajes extras"} (+${PagoExtraModel.formatearPrecio(totalExtras)})',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF34D399),
+                                        ),
+                                      ),
+                                    ),
+                                    const Text(
+                                      'Ver pestaña Extras →',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );
@@ -1319,7 +1442,7 @@ class _PortalScreenState extends State<PortalScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Tabs: Activos / Entregados
+                // Tabs: Activos / Entregados / Extras
                 Row(
                   children: [
                     Expanded(
@@ -1341,6 +1464,7 @@ class _PortalScreenState extends State<PortalScreen> {
                             child: Text(
                                 'Activos (${_pedidosListos.where((p) => p.estado != 'entregado').length})',
                                 style: TextStyle(
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w900,
                                     color: _vistaActiva == 'activos'
                                         ? const Color(0xFF014B44)
@@ -1349,7 +1473,7 @@ class _PortalScreenState extends State<PortalScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: GestureDetector(
                         onTap: () =>
@@ -1370,10 +1494,49 @@ class _PortalScreenState extends State<PortalScreen> {
                             child: Text(
                                 'Entregados (${_pedidosListos.where((p) => p.estado == 'entregado').length})',
                                 style: TextStyle(
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w900,
                                     color: _vistaActiva == 'entregados'
                                         ? const Color(0xFF014B44)
                                         : Colors.white70)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _vistaActiva = 'extras'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _vistaActiva == 'extras'
+                                ? const Color(0xFF34D399)
+                                : (_pagosExtras.isNotEmpty
+                                    ? const Color(0xFF10B981)
+                                        .withValues(alpha: 0.2)
+                                    : Colors.white.withValues(alpha: 0.08)),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: _vistaActiva == 'extras'
+                                    ? const Color(0xFF34D399)
+                                    : (_pagosExtras.isNotEmpty
+                                        ? const Color(0xFF34D399)
+                                            .withValues(alpha: 0.4)
+                                        : Colors.white
+                                            .withValues(alpha: 0.08))),
+                          ),
+                          child: Center(
+                            child: Text(
+                                'Extras (${_pagosExtras.length})',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    color: _vistaActiva == 'extras'
+                                        ? const Color(0xFF012B27)
+                                        : (_pagosExtras.isNotEmpty
+                                            ? const Color(0xFF34D399)
+                                            : Colors.white70))),
                           ),
                         ),
                       ),
@@ -1383,6 +1546,47 @@ class _PortalScreenState extends State<PortalScreen> {
                 const SizedBox(height: 12),
 
                 Builder(builder: (context) {
+                  if (_vistaActiva == 'extras') {
+                    if (_pagosExtras.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 40.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.stars_rounded,
+                                  size: 54,
+                                  color: Colors.white.withValues(alpha: 0.15)),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'No tenés viajes extras registrados en este turno.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.white54, fontSize: 14),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Los mandados o viajes especiales agregados por el local aparecerán acá.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.white30, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _pagosExtras.length,
+                      itemBuilder: (context, idx) {
+                        final extra = _pagosExtras[idx];
+                        return TarjetaPagoExtraCadete(extra: extra);
+                      },
+                    );
+                  }
+
                   final filtrados = _pedidosListos
                       .where((p) => _vistaActiva == 'activos'
                           ? p.estado != 'entregado'

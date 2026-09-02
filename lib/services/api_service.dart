@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/pedido_model.dart';
+import '../models/pago_extra_model.dart';
 
 class ApiService {
   static const String _baseUrl = 'https://chefsy.xyz';
@@ -29,8 +30,8 @@ class ApiService {
     }
   }
 
-  // --- Consultar Pedidos ---
-  Future<List<PedidoModel>> fetchPedidos(String cadeteId) async {
+  // --- Consultar Pedidos y Pagos Extras del Turno ---
+  Future<Map<String, dynamic>> fetchDatosTurno(String cadeteId) async {
     try {
       final res = await http.get(
         Uri.parse('$_baseUrl/api/public/pedidos?cadeteId=$cadeteId'),
@@ -39,11 +40,28 @@ class ApiService {
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        final list = data['pedidos'] as List? ?? [];
-        return list.map((p) => PedidoModel.fromJson(Map<String, dynamic>.from(p))).toList();
+        final listPedidos = data['pedidos'] as List? ?? [];
+        final listExtras = data['pagos_extras'] as List? ?? [];
+        return {
+          'pedidos': listPedidos
+              .map((p) => PedidoModel.fromJson(Map<String, dynamic>.from(p)))
+              .toList(),
+          'pagos_extras': listExtras
+              .map((e) => PagoExtraModel.fromJson(Map<String, dynamic>.from(e)))
+              .toList(),
+        };
       }
     } catch (_) {}
-    return [];
+    return {
+      'pedidos': <PedidoModel>[],
+      'pagos_extras': <PagoExtraModel>[],
+    };
+  }
+
+  // --- Consultar Pedidos ---
+  Future<List<PedidoModel>> fetchPedidos(String cadeteId) async {
+    final datos = await fetchDatosTurno(cadeteId);
+    return datos['pedidos'] as List<PedidoModel>;
   }
 
   // --- Cambiar Estado del Pedido ---
@@ -77,6 +95,7 @@ class ApiService {
     double heading = 0.0,
     int? batteryLevel,
     bool gpsActivo = true,
+    bool iniciarGpsManual = false,
   }) async {
     try {
       final res = await http.post(
@@ -93,6 +112,7 @@ class ApiService {
           'speed': speed,
           'heading': heading,
           'gps_activo': gpsActivo,
+          if (iniciarGpsManual) 'iniciar_gps_manual': true,
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 5));
