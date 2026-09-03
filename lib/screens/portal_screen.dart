@@ -497,7 +497,29 @@ class _PortalScreenState extends State<PortalScreen> {
     });
 
     try {
-      final ok = await _apiService.cambiarEstadoPedido(id, nuevoEstado);
+      final pedidoActual = _pedidosListos.firstWhere(
+        (p) => p.id == id,
+        orElse: () => PedidoModel(
+          id: id,
+          cliente: '',
+          telefono: '',
+          hora: '',
+          estado: nuevoEstado,
+          direccion: '',
+          productos: [],
+          total: 0,
+          metodoPago: 'efectivo',
+          pagoConfirmado: false,
+          observaciones: '',
+        ),
+      );
+
+      final ok = await _apiService.cambiarEstadoPedido(
+        id,
+        nuevoEstado,
+        metodoPago: pedidoActual.metodoPago,
+        pagoConfirmado: nuevoEstado == 'entregado' ? true : pedidoActual.pagoConfirmado,
+      );
       if (ok) {
         if (nuevoEstado == 'en_camino') {
           // Disparar reporte inmediato de GPS al servidor
@@ -519,6 +541,29 @@ class _PortalScreenState extends State<PortalScreen> {
         });
       }
     }
+  }
+
+  Future<void> _cambiarMetodoPagoPedido(String id, String nuevoMetodo, bool pagoConfirmado) async {
+    // Actualización optimista inmediata en memoria
+    setState(() {
+      final idx = _pedidosListos.indexWhere((p) => p.id == id);
+      if (idx != -1) {
+        _pedidosListos[idx] = _pedidosListos[idx].copyWith(
+          metodoPago: nuevoMetodo,
+          pagoConfirmado: pagoConfirmado,
+        );
+      }
+    });
+
+    try {
+      final ok = await _apiService.cambiarMetodoPago(id, nuevoMetodo, pagoConfirmado: pagoConfirmado);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo actualizar el método de pago en el servidor.')),
+        );
+        _fetchPedidosSilencioso();
+      }
+    } catch (_) {}
   }
 
   Future<void> _abrirWhatsApp(String telefono, String cliente) async {
@@ -1767,6 +1812,7 @@ class _PortalScreenState extends State<PortalScreen> {
                         pedido: p,
                         onAbrirWhatsApp: _abrirWhatsApp,
                         onCambiarEstado: _cambiarEstadoPedido,
+                        onCambiarMetodoPago: _cambiarMetodoPagoPedido,
                         estaCambiandoEstado: _cambiandoEstadoIds.contains(p.id),
                       );
                     },

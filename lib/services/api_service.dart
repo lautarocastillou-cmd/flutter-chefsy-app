@@ -71,7 +71,12 @@ class ApiService {
   }
 
   // --- Cambiar Estado del Pedido ---
-  Future<bool> cambiarEstadoPedido(String id, String nuevoEstado) async {
+  Future<bool> cambiarEstadoPedido(
+    String id,
+    String nuevoEstado, {
+    String? metodoPago,
+    bool? pagoConfirmado,
+  }) async {
     try {
       final res = await http.post(
         Uri.parse('$_baseUrl/api/public/pedidos'),
@@ -83,6 +88,34 @@ class ApiService {
           'accion': 'actualizar_estado',
           'id': id,
           'estado': nuevoEstado,
+          if (metodoPago != null) 'metodo_pago': metodoPago,
+          if (pagoConfirmado != null) 'pago_confirmado': pagoConfirmado,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      return res.statusCode == 200;
+    } catch (_) {}
+    return false;
+  }
+
+  // --- Cambiar Método de Pago / Cobro Directo ---
+  Future<bool> cambiarMetodoPago(
+    String id,
+    String nuevoMetodo, {
+    bool? pagoConfirmado,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/api/public/pedidos'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'accion': 'cambiar_metodo_pago',
+          'id': id,
+          'metodo_pago': nuevoMetodo,
+          if (pagoConfirmado != null) 'pago_confirmado': pagoConfirmado,
         }),
       ).timeout(const Duration(seconds: 8));
 

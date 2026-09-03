@@ -35,6 +35,7 @@ class PedidoModel {
     String? estado,
     bool? pagoConfirmado,
     CoordenadasModel? coordenadas,
+    String? metodoPago,
   }) {
     return PedidoModel(
       id: id,
@@ -47,7 +48,7 @@ class PedidoModel {
       productos: productos,
       total: total,
       costoEnvio: costoEnvio,
-      metodoPago: metodoPago,
+      metodoPago: metodoPago ?? this.metodoPago,
       pagoConfirmado: pagoConfirmado ?? this.pagoConfirmado,
       observaciones: observaciones,
       coordenadas: coordenadas ?? this.coordenadas,
@@ -98,6 +99,58 @@ class PedidoModel {
 
   String get totalFormateado => formatearPrecio(total);
   String get costoEnvioFormateado => costoEnvio != null ? formatearPrecio(costoEnvio!) : '\$0';
+
+  /// Extrae inteligentemente si el cliente especificó con cuánto abona en las observaciones
+  double? get montoPagaCliente {
+    if (observaciones.trim().isEmpty) return null;
+    final obs = observaciones.toLowerCase();
+
+    // 1. Patrón común: "pago con $20.000", "paga con 20mil", "cambio de 10000", "billete de 20.000", "cambio para 20k"
+    final regExp = RegExp(
+      r'(?:pago\s+con|paga\s+con|abona\s+con|abono\s+con|cambio\s+(?:de|para)|billete\s+de|vuelto\s+(?:de|para)|llevar\s+cambio\s+de)\s*[:$]?\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)\s*(mil|k)?',
+      caseSensitive: false,
+    );
+
+    final match = regExp.firstMatch(obs);
+    if (match != null) {
+      String rawNum = match.group(1)?.replaceAll('.', '').replaceAll(',', '') ?? '';
+      double? valor = double.tryParse(rawNum);
+      if (valor != null) {
+        final sufijo = match.group(2)?.toLowerCase();
+        if (sufijo == 'mil' || sufijo == 'k') {
+          valor *= 1000;
+        } else if (valor < 100 && valor > 0) {
+          // A veces escriben "pago con 20" refiriéndose a 20.000
+          if (total > 500 && (valor * 1000) >= total) {
+            valor *= 1000;
+          }
+        }
+        return valor;
+      }
+    }
+
+    // 2. Patrón secundario: "$20.000" o "con $20000" si el monto es superior al total
+    final regExpSecundario = RegExp(r'(?:con\s+)?\$\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]{4,6})');
+    final matchSec = regExpSecundario.firstMatch(obs);
+    if (matchSec != null) {
+      String rawNum = matchSec.group(1)?.replaceAll('.', '').replaceAll(',', '') ?? '';
+      double? valor = double.tryParse(rawNum);
+      if (valor != null && valor > total) {
+        return valor;
+      }
+    }
+
+    return null;
+  }
+
+  /// Calcula el vuelto exacto si el cliente paga con un monto mayor al total
+  double? get vueltoCalculado {
+    final paga = montoPagaCliente;
+    if (paga != null && paga > total) {
+      return paga - total;
+    }
+    return null;
+  }
 }
 
 class ProductoItem {

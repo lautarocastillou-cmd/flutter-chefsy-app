@@ -6,6 +6,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
   final PedidoModel pedido;
   final Function(String telefono, String cliente) onAbrirWhatsApp;
   final Function(String id, String nuevoEstado) onCambiarEstado;
+  final Function(String id, String nuevoMetodo, bool pagoConfirmado)? onCambiarMetodoPago;
   final bool estaCambiandoEstado;
 
   const TarjetaPedidoCadete({
@@ -13,6 +14,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
     required this.pedido,
     required this.onAbrirWhatsApp,
     required this.onCambiarEstado,
+    this.onCambiarMetodoPago,
     this.estaCambiandoEstado = false,
   });
 
@@ -341,66 +343,212 @@ class TarjetaPedidoCadete extends StatelessWidget {
                   top: BorderSide(
                       color: Colors.white.withValues(alpha: 0.1))),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Cobrar',
-                        style: TextStyle(fontSize: 11, color: Colors.white54)),
-                    Text(
-                      pedido.totalFormateado,
-                      style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Cobrar',
+                            style: TextStyle(fontSize: 11, color: Colors.white54)),
+                        Text(
+                          pedido.totalFormateado,
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white),
+                        ),
+                        if (pedido.costoEnvio != null && pedido.costoEnvio! > 0)
+                          Text(
+                            '(Incluye ${pedido.costoEnvioFormateado} envío)',
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.white38),
+                          ),
+                      ],
                     ),
-                    if (pedido.costoEnvio != null && pedido.costoEnvio! > 0)
-                      Text(
-                        '(Incluye ${pedido.costoEnvioFormateado} envío)',
-                        style: const TextStyle(
-                            fontSize: 10, color: Colors.white38),
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          pedido.metodoPago.toUpperCase(),
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white70),
+                        ),
+                        if (pedido.metodoPago.toLowerCase() ==
+                            'transferencia') ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: pedido.pagoConfirmado
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                                  : const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              pedido.pagoConfirmado
+                                  ? '✅ PAGADO'
+                                  : '❌ Pendiente Impactar',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: pedido.pagoConfirmado
+                                      ? const Color(0xFF34D399)
+                                      : const Color(0xFFFBBF24)),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      pedido.metodoPago.toUpperCase(),
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white70),
-                    ),
-                    if (pedido.metodoPago.toLowerCase() ==
-                        'transferencia') ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+
+                // Conciliación en puerta: Selector rápido de Efectivo / Transferencia
+                if (pedido.estado != 'entregado') ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            if (pedido.metodoPago.toLowerCase() != 'efectivo') {
+                              onCambiarMetodoPago?.call(pedido.id, 'efectivo', true);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: pedido.metodoPago.toLowerCase() == 'efectivo'
+                                  ? const Color(0xFF059669)
+                                  : Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: pedido.metodoPago.toLowerCase() == 'efectivo'
+                                    ? const Color(0xFF34D399)
+                                    : Colors.white.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.payments_rounded, size: 14, color: Colors.white),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Efectivo',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: pedido.metodoPago.toLowerCase() == 'efectivo'
+                                        ? Colors.white
+                                        : Colors.white60,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            if (pedido.metodoPago.toLowerCase() != 'transferencia') {
+                              onCambiarMetodoPago?.call(pedido.id, 'transferencia', false);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: pedido.metodoPago.toLowerCase() == 'transferencia'
+                                  ? const Color(0xFF2563EB)
+                                  : Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: pedido.metodoPago.toLowerCase() == 'transferencia'
+                                    ? const Color(0xFF60A5FA)
+                                    : Colors.white.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.account_balance_rounded, size: 14, color: Colors.white),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Transferencia',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: pedido.metodoPago.toLowerCase() == 'transferencia'
+                                        ? Colors.white
+                                        : Colors.white60,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (pedido.metodoPago.toLowerCase() == 'transferencia') ...[
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () {
+                        onCambiarMetodoPago?.call(
+                          pedido.id,
+                          'transferencia',
+                          !pedido.pagoConfirmado,
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: pedido.pagoConfirmado
                               ? const Color(0xFF10B981).withValues(alpha: 0.2)
                               : const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: pedido.pagoConfirmado
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFF59E0B),
+                            width: 0.8,
+                          ),
                         ),
-                        child: Text(
-                          pedido.pagoConfirmado
-                              ? '✅ PAGADO'
-                              : '❌ Pendiente Impactar',
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: pedido.pagoConfirmado
-                                  ? const Color(0xFF34D399)
-                                  : const Color(0xFFFBBF24)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              pedido.pagoConfirmado ? Icons.check_circle_rounded : Icons.pending_actions_rounded,
+                              size: 14,
+                              color: pedido.pagoConfirmado ? const Color(0xFF34D399) : const Color(0xFFFBBF24),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              pedido.pagoConfirmado
+                                  ? 'Transferencia confirmada (Tocá para desmarcar)'
+                                  : 'Pendiente de cobro (Tocá al recibir transferencia)',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: pedido.pagoConfirmado ? const Color(0xFF34D399) : const Color(0xFFFBBF24),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ],
             ),
           ),
@@ -424,6 +572,100 @@ class TarjetaPedidoCadete extends StatelessWidget {
                     color: Color(0xFFFDE68A),
                     fontSize: 13,
                     fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+
+          // Banner inteligente: Vuelto a dar calculado automáticamente
+          if (pedido.vueltoCalculado != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF064E3B), Color(0xFF047857)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF34D399), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.price_check_rounded, color: Color(0xFF34D399), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'CLIENTE PAGA CON: ${PedidoModel.formatearPrecio(pedido.montoPagaCliente!)}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'DAR VUELTO: ${PedidoModel.formatearPrecio(pedido.vueltoCalculado!)}',
+                          style: const TextStyle(
+                            color: Color(0xFF34D399),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Indicador si el pedido está en estado 'nuevo'
+          if (pedido.estado == 'nuevo') ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.hourglass_empty_rounded, size: 16, color: Colors.white60),
+                  SizedBox(width: 8),
+                  Text(
+                    'PEDIDO ASIGNADO • EN PREPARACIÓN',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
