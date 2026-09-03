@@ -138,8 +138,20 @@ class GpsTaskHandler extends TaskHandler {
   @override
   void onReceiveData(Object data) {
     if (data is String) {
+      if (data == 'apagar_gps' || data.contains('"comando":"apagar_gps"') || data.contains('"apagar_gps"')) {
+        _positionStreamSub?.cancel();
+        _positionStreamSub = null;
+        FlutterForegroundTask.stopService();
+        return;
+      }
       try {
         final mapa = jsonDecode(data);
+        if (mapa['comando'] == 'apagar_gps') {
+          _positionStreamSub?.cancel();
+          _positionStreamSub = null;
+          FlutterForegroundTask.stopService();
+          return;
+        }
         if (mapa.containsKey('simulacion_activa')) {
           _simulacionActiva = mapa['simulacion_activa'] == true;
         }
@@ -155,6 +167,16 @@ class GpsTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
+    // 0. Si el usuario desactivó el rastreo desde la app, no emitir ningún reporte y detener servicio
+    _prefs ??= await SharedPreferences.getInstance();
+    final rastreoHabilitado = _prefs?.getBool('rastreo_habilitado') ?? true;
+    if (!rastreoHabilitado) {
+      _positionStreamSub?.cancel();
+      _positionStreamSub = null;
+      FlutterForegroundTask.stopService();
+      return;
+    }
+
     // 1. Chequeo de nuevos pedidos asignados cada ~8 segundos (2 ticks)
     _ticksChequeoPedidos++;
     if (_ticksChequeoPedidos >= 2) {
@@ -245,6 +267,14 @@ class GpsTaskHandler extends TaskHandler {
 
     try {
       _prefs ??= await SharedPreferences.getInstance();
+      final rastreoHabilitado = _prefs?.getBool('rastreo_habilitado') ?? true;
+      if (!rastreoHabilitado) {
+        _positionStreamSub?.cancel();
+        _positionStreamSub = null;
+        FlutterForegroundTask.stopService();
+        return;
+      }
+
       final cadeteId = _prefs?.getString('cadete_id');
       if (cadeteId == null || cadeteId.isEmpty) return;
 

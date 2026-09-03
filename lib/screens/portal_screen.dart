@@ -135,19 +135,25 @@ class _PortalScreenState extends State<PortalScreen> {
 
   Future<void> _cargarDatos() async {
     final isRunning = await FlutterForegroundTask.isRunningService;
-    final simActiva = await _authService.isSimulacionActiva();
-    final simCoords = await _authService.obtenerSimCoordenadas();
     final prefs = await SharedPreferences.getInstance();
     _prefs = prefs;
+    final rastreoHabilitado = prefs.getBool('rastreo_habilitado') ?? false;
+    final realmenteRastreando = isRunning && rastreoHabilitado;
+    if (!rastreoHabilitado && isRunning) {
+      await FlutterForegroundTask.stopService();
+    }
+
+    final simActiva = await _authService.isSimulacionActiva();
+    final simCoords = await _authService.obtenerSimCoordenadas();
     await prefs.setString('cadete_id', widget.cadeteId);
 
     setState(() {
-      _estaRastreando = isRunning;
+      _estaRastreando = realmenteRastreando;
       _simulacionActiva = simActiva;
       _alertasSonoras = true;
       _simLat = simCoords['lat']!;
       _simLng = simCoords['lng']!;
-      if (isRunning) {
+      if (realmenteRastreando) {
         _ultimaUbicacionTexto = simActiva
             ? 'Simulador activo: [$_simLat, $_simLng]'
             : 'Transmitiendo GPS...';
@@ -246,6 +252,7 @@ class _PortalScreenState extends State<PortalScreen> {
     }
 
     try {
+      await _prefs?.setBool('rastreo_habilitado', true);
       await _prefs?.setString('cadete_id', widget.cadeteId);
       await FlutterForegroundTask.startService(
         serviceId: 888,
@@ -311,7 +318,15 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   Future<void> _detenerRastreo() async {
-    // Notificar al servidor que el GPS fue apagado intencionalmente
+    // 1. Marcar persistentemente que el usuario no quiere rastreo
+    await _prefs?.setBool('rastreo_habilitado', false);
+
+    // 2. Ordenar al Isolate de fondo que cancele sus suscripciones GPS inmediatamente
+    try {
+      FlutterForegroundTask.sendDataToTask('apagar_gps');
+    } catch (_) {}
+
+    // 3. Notificar al servidor que el GPS fue apagado intencionalmente
     final cadeteId = _prefs?.getString('cadete_id') ?? '';
     if (cadeteId.isNotEmpty) {
       try {
@@ -327,6 +342,8 @@ class _PortalScreenState extends State<PortalScreen> {
             .timeout(const Duration(seconds: 4));
       } catch (_) {}
     }
+
+    // 4. Detener el servicio nativo de primer plano
     await FlutterForegroundTask.stopService();
     if (mounted) {
       setState(() {
@@ -423,12 +440,14 @@ class _PortalScreenState extends State<PortalScreen> {
         }
       }
       final isRunning = await FlutterForegroundTask.isRunningService;
+      final rastreoHabilitado = _prefs?.getBool('rastreo_habilitado') ?? false;
+      final realmenteRastreando = isRunning && rastreoHabilitado;
       setState(() {
         _pedidosListos = list;
         _pagosExtras = extras;
         _montoBase = montoBase;
         _turnoActivo = turnoActivo;
-        if (!isRunning && _estaRastreando) {
+        if (!realmenteRastreando && _estaRastreando) {
           _estaRastreando = false;
           _ultimaUbicacionTexto = 'Rastreo pausado.';
         }
@@ -942,13 +961,15 @@ class _PortalScreenState extends State<PortalScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Switch.adaptive(
-                            value: _estaRastreando,
-                            onChanged: (_) => _toggleRastreo(),
-                            activeColor: Colors.white,
-                            activeTrackColor: const Color(0xFF059669),
-                            inactiveThumbColor: Colors.white70,
-                            inactiveTrackColor: Colors.white12,
+                          IgnorePointer(
+                            child: Switch.adaptive(
+                              value: _estaRastreando,
+                              onChanged: (_) {},
+                              activeColor: Colors.white,
+                              activeTrackColor: const Color(0xFF059669),
+                              inactiveThumbColor: Colors.white70,
+                              inactiveTrackColor: Colors.white12,
+                            ),
                           ),
                         ],
                       ),
