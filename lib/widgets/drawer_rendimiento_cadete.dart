@@ -54,7 +54,7 @@ class _DrawerRendimientoCadeteState extends State<DrawerRendimientoCadete> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Rendimiento & Podio',
+                            'Rendimiento & Registro',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
@@ -162,7 +162,7 @@ class _DrawerRendimientoCadeteState extends State<DrawerRendimientoCadete> {
                           ),
                           const SizedBox(height: 18),
                           _construirSeccionRanking(
-                            titulo: '🏆 PODIO DE LA JORNADA',
+                            titulo: '🏆 REGISTRO DE LA JORNADA',
                             ranking: rend.rankingHoy,
                             cadeteActualId: rend.cadeteId,
                           ),
@@ -187,7 +187,7 @@ class _DrawerRendimientoCadeteState extends State<DrawerRendimientoCadete> {
                           ),
                           const SizedBox(height: 18),
                           _construirSeccionRanking(
-                            titulo: '🏆 PODIO SEMANAL',
+                            titulo: '🏆 REGISTRO SEMANAL',
                             ranking: rend.rankingSemana,
                             cadeteActualId: rend.cadeteId,
                           ),

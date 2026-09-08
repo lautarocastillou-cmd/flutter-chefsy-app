@@ -843,14 +843,31 @@ class _PortalScreenState extends State<PortalScreen> {
                         ),
                       ),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Botón Récord & Podio (Abre Barra Lateral)
+                          // 1. Alertas sonoras (Campana)
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: Icon(
+                              _alertasSonoras
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_off_rounded,
+                              size: 21,
+                              color: _alertasSonoras
+                                  ? const Color(0xFF34D399)
+                                  : Colors.white38,
+                            ),
+                            onPressed: _toggleAlertas,
+                          ),
+                          const SizedBox(width: 12),
+                          // 2. Botón Registro (Contra la esquina derecha, abre barra lateral)
                           GestureDetector(
                             onTap: () =>
                                 _scaffoldKey.currentState?.openEndDrawer(),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                  horizontal: 10, vertical: 5),
                               decoration: BoxDecoration(
                                 color: (_rendimientoData?.miHoy.esMasRapido ==
                                         true)
@@ -882,18 +899,11 @@ class _PortalScreenState extends State<PortalScreen> {
                                         ? const Color(0xFF34D399)
                                         : const Color(0xFFFBBF24),
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 5),
                                   Text(
-                                    _rendimientoData?.miHoy
-                                                    .velocidadMediaMovimiento !=
-                                                null &&
-                                            _rendimientoData!.miHoy
-                                                    .velocidadMediaMovimiento >
-                                                0
-                                        ? '${_rendimientoData!.miHoy.velocidadMediaMovimiento.toStringAsFixed(0)} km/h'
-                                        : 'Podio',
+                                    'Registro',
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w900,
                                       color: (_rendimientoData
                                                   ?.miHoy.esMasRapido ==
@@ -905,41 +915,6 @@ class _PortalScreenState extends State<PortalScreen> {
                                 ],
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: Icon(
-                              _alertasSonoras
-                                  ? Icons.notifications_active_rounded
-                                  : Icons.notifications_off_rounded,
-                              size: 20,
-                              color: _alertasSonoras
-                                  ? const Color(0xFF34D399)
-                                  : Colors.white38,
-                            ),
-                            onPressed: _toggleAlertas,
-                          ),
-                          const SizedBox(width: 10),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.refresh_rounded,
-                                size: 22, color: Colors.white),
-                            onPressed: () {
-                              _fetchPedidos();
-                              _cargarRendimiento();
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.menu_rounded,
-                                size: 24, color: Colors.white),
-                            onPressed: () =>
-                                _scaffoldKey.currentState?.openEndDrawer(),
                           ),
                         ],
                       ),
