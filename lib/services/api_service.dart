@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/pedido_model.dart';
 import '../models/pago_extra_model.dart';
+import '../models/rendimiento_model.dart';
 
 class ApiService {
   static const String _baseUrl = 'https://chefsy.xyz';
@@ -159,5 +162,152 @@ class ApiService {
     } catch (_) {
       return false;
     }
+  }
+
+  // --- Consultar Rendimiento, Velocidad y Ranking Semanal ---
+  Future<RendimientoCompletoData?> fetchRendimientoCadete(String cadeteId) async {
+    final cacheKey = 'cache_rendimiento_$cadeteId';
+    SharedPreferences? prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (_) {}
+
+    // 1. Intentar consultar endpoint principal del servidor
+    try {
+      final res = await http.get(
+        Uri.parse('$_baseUrl/api/public/cadetes/rendimiento?cadeteId=$cadeteId'),
+        headers: {'Authorization': 'Bearer $_token'},
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        if (data['ok'] == true) {
+          // Guardar en caché local para soporte offline
+          prefs?.setString(cacheKey, res.body);
+          return RendimientoCompletoData.fromJson(data, esDesdeCache: false);
+        }
+      }
+    } catch (_) {
+      // Continuar con fallbacks
+    }
+
+    // 2. Fallback de respaldo: Consultar directamente Supabase
+    try {
+      final cadeteIdNorm = cadeteId.trim().toLowerCase();
+
+      // Consultar historial semanal en Supabase
+      final semanasRes = await Supabase.instance.client
+          .from('cadetes_rendimiento_semanal')
+          .select()
+          .or('cadete_id.ilike.$cadeteIdNorm,cadete_nombre.ilike.$cadeteIdNorm')
+          .order('anio', ascending: false)
+          .order('semana_numero', ascending: false)
+          .limit(10);
+
+      // Consultar registro de hoy si existe en Supabase
+      final ahora = DateTime.now();
+      final fechaHoyStr =
+          "${ahora.year}-${ahora.month.toString().padLeft(2, '0')}-${ahora.day.toString().padLeft(2, '0')}";
+      final hoyRes = await Supabase.instance.client
+          .from('cadetes_rendimiento_diario')
+          .select()
+          .eq('fecha', fechaHoyStr);
+
+      final List hoyList = (hoyRes as List?) ?? [];
+      final List semanasList = (semanasRes as List?) ?? [];
+
+      if (semanasList.isNotEmpty || hoyList.isNotEmpty) {
+        Map<String, dynamic>? masRapidoRow;
+        Map<String, dynamic>? miHoyRow;
+        for (final item in hoyList) {
+          final m = Map<String, dynamic>.from(item);
+          final id = (m['cadete_id'] ?? '').toString().toLowerCase();
+          final nom = (m['cadete_nombre'] ?? '').toString().toLowerCase();
+          if (id == cadeteIdNorm || nom == cadeteIdNorm) {
+            miHoyRow = m;
+          }
+          if (m['es_mas_rapido_dia'] == true) {
+            masRapidoRow = m;
+          }
+        }
+
+        final miRendimientoHoy = RendimientoCadeteHoy(
+          pedidosEntregados:
+              (miHoyRow?['pedidos_entregados'] as num?)?.toInt() ?? 0,
+          kmTotales: (miHoyRow?['km_totales'] as num?)?.toDouble() ?? 0.0,
+          velocidadMediaMovimiento:
+              (miHoyRow?['velocidad_media_movimiento'] as num?)?.toDouble() ??
+                  0.0,
+          velocidadMaxima:
+              (miHoyRow?['velocidad_maxima'] as num?)?.toDouble() ?? 0.0,
+          tiempoPromedioEntregaMin:
+              (miHoyRow?['tiempo_promedio_entrega_min'] as num?)?.toInt() ?? 0,
+          ranking: (miHoyRow?['ranking_dia'] as num?)?.toInt() ?? 1,
+          esMasRapido: miHoyRow?['es_mas_rapido_dia'] == true,
+        );
+
+        final masRapidoInfo = masRapidoRow != null
+            ? MasRapidoInfo(
+                cadeteId: masRapidoRow['cadete_id']?.toString() ?? '',
+                nombre: masRapidoRow['cadete_nombre']?.toString() ?? 'Cadete',
+                velocidad: (masRapidoRow['velocidad_media_movimiento'] as num?)
+                        ?.toDouble() ??
+                    0.0,
+                esPropio: miRendimientoHoy.esMasRapido,
+              )
+            : null;
+
+        final historial = semanasList.map((s) {
+          return RendimientoSemanaHistorica.fromJson(
+              Map<String, dynamic>.from(s));
+        }).toList();
+
+        final RendimientoSemanaActual semanaActual = historial.isNotEmpty
+            ? RendimientoSemanaActual(
+                semanaNumero: historial.first.semanaNumero,
+                anio: historial.first.anio,
+                semanaInicio: historial.first.semanaInicio,
+                semanaFin: historial.first.semanaFin,
+                pedidosEntregados: historial.first.pedidosEntregados,
+                kmTotales: historial.first.kmTotales,
+                velocidadMediaMovimiento:
+                    historial.first.velocidadMediaMovimiento,
+                velocidadMaxima: historial.first.velocidadMaxima,
+                tiempoPromedioEntregaMin:
+                    historial.first.tiempoPromedioEntregaMin,
+                ranking: historial.first.posicionRanking,
+                esMasRapido: historial.first.esMasRapidoSemana,
+              )
+            : const RendimientoSemanaActual();
+
+        return RendimientoCompletoData(
+          cadeteId: cadeteId,
+          cadeteNombre: miHoyRow?['cadete_nombre']?.toString() ?? cadeteId,
+          fechaNegocio: fechaHoyStr,
+          miHoy: miRendimientoHoy,
+          masRapidoHoy: masRapidoInfo,
+          rankingHoy: [],
+          miSemana: semanaActual,
+          masRapidoSemana: null,
+          rankingSemana: [],
+          historialSemanas: historial,
+          esDesdeCache: false,
+        );
+      }
+    } catch (_) {
+      // Continuar con caché local
+    }
+
+    // 3. Fallback Offline Local: Leer desde SharedPreferences
+    final cachedStr = prefs?.getString(cacheKey);
+    if (cachedStr != null && cachedStr.isNotEmpty) {
+      try {
+        final cachedData = jsonDecode(cachedStr) as Map<String, dynamic>;
+        return RendimientoCompletoData.fromJson(cachedData,
+            esDesdeCache: true);
+      } catch (_) {}
+    }
+
+    return null;
   }
 }
