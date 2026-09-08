@@ -13,7 +13,7 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/tarjeta_pedido.dart';
 import '../widgets/tarjeta_pago_extra.dart';
-import '../widgets/modal_rendimiento_cadete.dart';
+import '../widgets/drawer_rendimiento_cadete.dart';
 import '../models/rendimiento_model.dart';
 import '../background_service.dart';
 import '../services/updater_service.dart';
@@ -57,6 +57,7 @@ class _PortalScreenState extends State<PortalScreen> {
   bool _alertasSonoras = true;
   int _ultimoCambioLocalMs = 0;
   final Set<String> _cambiandoEstadoIds = {};
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   SharedPreferences? _prefs;
 
@@ -740,6 +741,11 @@ class _PortalScreenState extends State<PortalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      endDrawer: DrawerRendimientoCadete(
+        rendimiento: _rendimientoData,
+        onRefrescar: _cargarRendimiento,
+      ),
       backgroundColor: const Color(0xFF014B44),
       body: Container(
         decoration: const BoxDecoration(
@@ -838,6 +844,69 @@ class _PortalScreenState extends State<PortalScreen> {
                       ),
                       Row(
                         children: [
+                          // Botón Récord & Podio (Abre Barra Lateral)
+                          GestureDetector(
+                            onTap: () =>
+                                _scaffoldKey.currentState?.openEndDrawer(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: (_rendimientoData?.miHoy.esMasRapido ==
+                                        true)
+                                    ? const Color(0xFF10B981)
+                                        .withValues(alpha: 0.25)
+                                    : Colors.amber.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: (_rendimientoData?.miHoy.esMasRapido ==
+                                          true)
+                                      ? const Color(0xFF34D399)
+                                          .withValues(alpha: 0.5)
+                                      : const Color(0xFFFBBF24)
+                                          .withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    (_rendimientoData?.miHoy.esMasRapido ==
+                                            true)
+                                        ? Icons.emoji_events_rounded
+                                        : Icons.speed_rounded,
+                                    size: 14,
+                                    color: (_rendimientoData
+                                                ?.miHoy.esMasRapido ==
+                                            true)
+                                        ? const Color(0xFF34D399)
+                                        : const Color(0xFFFBBF24),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _rendimientoData?.miHoy
+                                                    .velocidadMediaMovimiento !=
+                                                null &&
+                                            _rendimientoData!.miHoy
+                                                    .velocidadMediaMovimiento >
+                                                0
+                                        ? '${_rendimientoData!.miHoy.velocidadMediaMovimiento.toStringAsFixed(0)} km/h'
+                                        : 'Podio',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                      color: (_rendimientoData
+                                                  ?.miHoy.esMasRapido ==
+                                              true)
+                                          ? const Color(0xFF34D399)
+                                          : const Color(0xFFFBBF24),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
                           IconButton(
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
@@ -852,13 +921,25 @@ class _PortalScreenState extends State<PortalScreen> {
                             ),
                             onPressed: _toggleAlertas,
                           ),
-                          const SizedBox(width: 14),
+                          const SizedBox(width: 10),
                           IconButton(
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                             icon: const Icon(Icons.refresh_rounded,
                                 size: 22, color: Colors.white),
-                            onPressed: _fetchPedidos,
+                            onPressed: () {
+                              _fetchPedidos();
+                              _cargarRendimiento();
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.menu_rounded,
+                                size: 24, color: Colors.white),
+                            onPressed: () =>
+                                _scaffoldKey.currentState?.openEndDrawer(),
                           ),
                         ],
                       ),
@@ -1632,9 +1713,6 @@ class _PortalScreenState extends State<PortalScreen> {
                   },
                 ),
 
-                // ── Tarjeta de Velocidad, Récord y Ranking Semanal ──
-                _construirTarjetaRendimientoVelocidad(),
-
                 // Pedidos asignados
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1855,311 +1933,4 @@ class _PortalScreenState extends State<PortalScreen> {
     ),
   );
 }
-
-  Widget _construirTarjetaRendimientoVelocidad() {
-    final rend = _rendimientoData;
-    final miHoy = rend?.miHoy;
-    final masRapido = rend?.masRapidoHoy;
-    final velocidadMedia = miHoy?.velocidadMediaMovimiento ?? 0.0;
-    final esPropio = miHoy?.esMasRapido ?? false;
-    final hayGanador = masRapido != null && masRapido.velocidad > 0;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF023631),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: esPropio
-              ? const Color(0xFF34D399).withValues(alpha: 0.5)
-              : Colors.white.withValues(alpha: 0.1),
-          width: esPropio ? 1.5 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () {
-            if (_rendimientoData != null) {
-              ModalRendimientoCadete.mostrar(
-                context,
-                rendimiento: _rendimientoData!,
-                onRefrescar: _cargarRendimiento,
-              );
-            } else {
-              _cargarRendimiento();
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Cabecera de la tarjeta
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981)
-                                .withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.speed_rounded,
-                            size: 16,
-                            color: Color(0xFF34D399),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'RENDIMIENTO & VELOCIDAD',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          'Ver Récord & Podio',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color:
-                                const Color(0xFF34D399).withValues(alpha: 0.9),
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 14,
-                          color: Color(0xFF34D399),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Indicadores principales
-                Row(
-                  children: [
-                    // Columna 1: Tu Velocidad Promedio
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 10, horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF012B27),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFF10B981)
-                                .withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(
-                                  Icons.speed_rounded,
-                                  size: 13,
-                                  color: Color(0xFF34D399),
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'TU VEL. MEDIA',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF34D399),
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              velocidadMedia > 0
-                                  ? '${velocidadMedia.toStringAsFixed(1)} km/h'
-                                  : '-- km/h',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            const Text(
-                              'En rodaje activo',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white54,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Columna 2: Más Rápido del Turno
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 10, horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: esPropio
-                              ? const Color(0xFF064E3B)
-                              : const Color(0xFF012B27),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: esPropio
-                                ? const Color(0xFF34D399)
-                                : (hayGanador
-                                    ? const Color(0xFFFBBF24)
-                                        .withValues(alpha: 0.3)
-                                    : Colors.white.withValues(alpha: 0.1)),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.emoji_events_rounded,
-                                  size: 13,
-                                  color: esPropio
-                                      ? const Color(0xFF34D399)
-                                      : const Color(0xFFFBBF24),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  esPropio
-                                      ? '¡SOS EL MÁS RÁPIDO!'
-                                      : 'MÁS RÁPIDO HOY',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: esPropio
-                                        ? const Color(0xFF34D399)
-                                        : const Color(0xFFFBBF24),
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              hayGanador
-                                  ? (esPropio
-                                      ? '${masRapido.velocidad.toStringAsFixed(1)} km/h'
-                                      : '${masRapido.nombre} (${masRapido.velocidad.toStringAsFixed(1)}k)')
-                                  : 'En disputa',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                color: esPropio
-                                    ? const Color(0xFF34D399)
-                                    : (hayGanador
-                                        ? const Color(0xFFFBBF24)
-                                        : Colors.white70),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              hayGanador
-                                  ? (esPropio
-                                      ? 'Corona de velocidad'
-                                      : 'Lidera la jornada')
-                                  : 'Completá entregas',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.white54,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Mini banner semanal abajo
-                if (rend != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF012421),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_view_week_rounded,
-                              size: 13,
-                              color: Color(0xFF34D399),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Semana #${rend.miSemana.semanaNumero}: ${rend.miSemana.pedidosEntregados} envíos • ${rend.miSemana.kmTotales.toStringAsFixed(1)} km',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (rend.miSemana.velocidadMediaMovimiento > 0)
-                          Text(
-                            '${rend.miSemana.velocidadMediaMovimiento.toStringAsFixed(1)} km/h',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF34D399),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
