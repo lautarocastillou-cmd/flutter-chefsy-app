@@ -42,6 +42,9 @@ class GpsTaskHandler extends TaskHandler {
   bool _simulacionActiva = false;
   final Battery _battery = Battery();
 
+  // Buffer local en memoria para tolerancia a cortes de señal 4G (Cola Offline)
+  final List<Map<String, dynamic>> _bufferPuntos = [];
+
   // Variables en memoria para joystick en tiempo real
   double? _liveSimLat;
   double? _liveSimLng;
@@ -262,6 +265,25 @@ class GpsTaskHandler extends TaskHandler {
     }
     _ultimoReporteTime = ahora;
 
+    // 1. Encolar siempre el nuevo punto capturado con su timestamp real
+    final puntoCapturado = {
+      'lat': position.latitude,
+      'lng': position.longitude,
+      'accuracy': position.accuracy,
+      'speed': position.speed >= 0 ? position.speed : 0,
+      'heading': position.heading >= 0 ? position.heading : 0,
+      't': ahora.toUtc().toIso8601String(),
+    };
+
+    if (_bufferPuntos.isEmpty ||
+        (_bufferPuntos.last['lat'] != puntoCapturado['lat'] ||
+         _bufferPuntos.last['lng'] != puntoCapturado['lng'])) {
+      _bufferPuntos.add(puntoCapturado);
+      if (_bufferPuntos.length > 50) {
+        _bufferPuntos.removeAt(0);
+      }
+    }
+
     if (_ocupado) return;
     _ocupado = true;
 
@@ -283,6 +305,8 @@ class GpsTaskHandler extends TaskHandler {
         batteryLevel = await _battery.batteryLevel;
       } catch (_) {}
 
+      final ráfagaAEnviar = List<Map<String, dynamic>>.from(_bufferPuntos);
+
       final response = await http.post(
         Uri.parse(apiUrl),
         headers: {
@@ -298,10 +322,19 @@ class GpsTaskHandler extends TaskHandler {
           'heading': position.heading >= 0 ? position.heading : 0,
           'gps_activo': true,
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
+          if (ráfagaAEnviar.isNotEmpty) 'bufferPuntos': ráfagaAEnviar,
         }),
       ).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
+        // Al confirmar entrega exitosa por el servidor, remover solo los puntos enviados
+        // evitando descartar puntos nuevos capturados mientras la petición estuvo en vuelo
+        if (_bufferPuntos.length >= ráfagaAEnviar.length) {
+          _bufferPuntos.removeRange(0, ráfagaAEnviar.length);
+        } else {
+          _bufferPuntos.clear();
+        }
+
         final data = jsonDecode(response.body);
         if (data['comando'] == 'apagar_gps' || data['gps_activo'] == false) {
           FlutterForegroundTask.sendDataToMain('apagar_gps');
@@ -309,6 +342,8 @@ class GpsTaskHandler extends TaskHandler {
         }
       }
     } catch (_) {
+      // En caso de corte de señal 4G o timeout, _bufferPuntos permanece intacto
+      // para enviar la ráfaga completa en cuanto se recupere la conexión.
     } finally {
       _ocupado = false;
     }
