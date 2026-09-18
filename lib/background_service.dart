@@ -51,6 +51,7 @@ class GpsTaskHandler extends TaskHandler {
 
   // Control de pedidos en segundo plano
   int _ticksChequeoPedidos = 0;
+  bool _turnoActivoUltimo = true;
   Set<String> _pedidosConocidosIds = {};
 
   @override
@@ -115,6 +116,9 @@ class GpsTaskHandler extends TaskHandler {
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
+        if (data is Map && data.containsKey('turno_activo')) {
+          _turnoActivoUltimo = data['turno_activo'] == true;
+        }
         final list = (data['pedidos'] as List? ?? [])
             .where((p) => p['estado'] != 'entregado' && p['estado'] != 'cancelado')
             .toList();
@@ -180,9 +184,12 @@ class GpsTaskHandler extends TaskHandler {
       return;
     }
 
-    // 1. Chequeo de nuevos pedidos asignados cada ~8 segundos (2 ticks)
+    // 1. Chequeo inteligente de nuevos pedidos asignados:
+    // Si el turno está abierto, chequea cada ~24 segundos (6 ticks de 4s).
+    // Si el turno está cerrado, entra en ahorro extremo chequeando cada ~100s (25 ticks).
+    final int ticksNecesarios = _turnoActivoUltimo ? 6 : 25;
     _ticksChequeoPedidos++;
-    if (_ticksChequeoPedidos >= 2) {
+    if (_ticksChequeoPedidos >= ticksNecesarios) {
       _ticksChequeoPedidos = 0;
       _verificarNuevosPedidosEnSegundoPlano();
     }

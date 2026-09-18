@@ -43,6 +43,7 @@ class _PortalScreenState extends State<PortalScreen> {
   bool _cargandoPedidos = false;
   String _ultimaUbicacionTexto = 'Esperando señal GPS...';
   Timer? _pollingTimer;
+  Timer? _rendimientoTimer;
   RealtimeChannel? _pedidosChannel;
   RealtimeChannel? _extrasChannel;
   RealtimeChannel? _turnosChannel;
@@ -116,6 +117,9 @@ class _PortalScreenState extends State<PortalScreen> {
 
     _pollingTimer = Timer.periodic(
         const Duration(seconds: 15), (_) => _fetchPedidosSilencioso());
+    // Rendimiento y ranking se actualizan de fondo cada 5 minutos (evita miles de consultas pesadas de telemetría)
+    _rendimientoTimer = Timer.periodic(
+        const Duration(minutes: 5), (_) => _cargarRendimiento());
     _pedidosChannel = Supabase.instance.client
         .channel('public:pedidos:cadete_${widget.cadeteId}')
         .onPostgresChanges(
@@ -151,6 +155,7 @@ class _PortalScreenState extends State<PortalScreen> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _rendimientoTimer?.cancel();
     _pedidosChannel?.unsubscribe();
     _extrasChannel?.unsubscribe();
     _turnosChannel?.unsubscribe();
@@ -478,7 +483,6 @@ class _PortalScreenState extends State<PortalScreen> {
           _ultimaUbicacionTexto = 'Rastreo pausado.';
         }
       });
-      _cargarRendimiento();
     }
   }
 
@@ -551,6 +555,9 @@ class _PortalScreenState extends State<PortalScreen> {
         if (nuevoEstado == 'en_camino') {
           // Disparar reporte inmediato de GPS al servidor
           reportarUbicacionAhora();
+        } else if (nuevoEstado == 'entregado') {
+          // Si entregó un pedido, actualizar de inmediato las métricas y ranking
+          _cargarRendimiento();
         }
         _fetchPedidosSilencioso();
       } else {
