@@ -105,10 +105,12 @@ class _PortalScreenState extends State<PortalScreen> {
           });
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🛑 Tu GPS fue desconectado por Torre de Control.'),
-              backgroundColor: Colors.redAccent,
-              duration: Duration(seconds: 4),
+            SnackBar(
+              content: const Text('Tu GPS fue desconectado por Torre de Control.'),
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              duration: const Duration(seconds: 4),
             ),
           );
         }
@@ -228,14 +230,19 @@ class _PortalScreenState extends State<PortalScreen> {
   Future<void> _toggleAlertas() async {
     final nuevo = !_alertasSonoras;
     await _prefs?.setBool('alertas_sonoras', nuevo);
+    if (!mounted) return;
     setState(() {
       _alertasSonoras = nuevo;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text(nuevo
-              ? '🔔 Alertas de nuevos pedidos ACTIVADAS'
-              : '🔕 Alertas de nuevos pedidos SILENCIADAS')),
+        content: Text(nuevo
+            ? 'Alertas de nuevos pedidos activadas'
+            : 'Alertas de nuevos pedidos silenciadas'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
     );
   }
 
@@ -247,17 +254,159 @@ class _PortalScreenState extends State<PortalScreen> {
     widget.onLogout();
   }
 
+  Future<void> _mostrarCartelUbicacionRequerida({
+    bool abrirAjustesGps = false,
+    bool abrirAjustesApp = false,
+  }) async {
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF0F1D1B),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
+          ),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.location_off_outlined,
+                  color: Colors.white70,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Debes encender la ubicación para poder entrar en servicio.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  height: 1.45,
+                  letterSpacing: 0.1,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white60,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Entendido',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (abrirAjustesGps || abrirAjustesApp) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          if (abrirAjustesGps) {
+                            await Geolocator.openLocationSettings();
+                          } else if (abrirAjustesApp) {
+                            await Geolocator.openAppSettings();
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF047857),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Ajustes',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<bool> _verificarPermisosGps() async {
+    // 1. Caso: Servicio de ubicación del celular apagado (GPS desactivado)
+    final bool servicioHabilitado = await Geolocator.isLocationServiceEnabled();
+    if (!servicioHabilitado) {
+      if (mounted) {
+        await _mostrarCartelUbicacionRequerida(abrirAjustesGps: true);
+      }
+      return false;
+    }
+
+    // 2. Caso: Permisos de ubicación denegados o no otorgados
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
+
     if (permission == LocationPermission.deniedForever) {
-      await Geolocator.openAppSettings();
+      if (mounted) {
+        await _mostrarCartelUbicacionRequerida(abrirAjustesApp: true);
+      }
       return false;
     }
-    return permission == LocationPermission.whileInUse ||
+
+    if (permission == LocationPermission.denied) {
+      if (mounted) {
+        await _mostrarCartelUbicacionRequerida();
+      }
+      return false;
+    }
+
+    final permitido = permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always;
+
+    if (!permitido) {
+      if (mounted) {
+        await _mostrarCartelUbicacionRequerida();
+      }
+      return false;
+    }
+
+    return true;
   }
 
   Future<void> _iniciarRastreo() async {
@@ -269,15 +418,6 @@ class _PortalScreenState extends State<PortalScreen> {
     if (!_simulacionActiva) {
       final gpsOk = await _verificarPermisosGps();
       if (!gpsOk) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content:
-                  Text('❌ Necesitamos permiso de ubicación para rastrear.'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
         return;
       }
     }
@@ -288,8 +428,8 @@ class _PortalScreenState extends State<PortalScreen> {
       await FlutterForegroundTask.startService(
         serviceId: 888,
         notificationTitle: _simulacionActiva
-            ? '🛠️ Chefsy GPS (SIMULADO)'
-            : '🛵 Chefsy Cadetería',
+            ? 'Chefsy GPS (Simulado)'
+            : 'Chefsy Cadetería',
         notificationText: _simulacionActiva
             ? 'Simulación activa: [$_simLat, $_simLng]'
             : 'GPS activo. Podés guardar el celular en el bolsillo.',
@@ -337,11 +477,21 @@ class _PortalScreenState extends State<PortalScreen> {
         } catch (_) {}
       }
     } catch (e) {
-      if (mounted) {
+      if (e is LocationServiceDisabledException ||
+          e is PermissionDeniedException) {
+        if (mounted) {
+          await _mostrarCartelUbicacionRequerida(
+            abrirAjustesGps: e is LocationServiceDisabledException,
+            abrirAjustesApp: e is PermissionDeniedException,
+          );
+        }
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al iniciar rastreo: $e'),
-            backgroundColor: Colors.redAccent,
+            content: Text('No fue posible iniciar el servicio: $e'),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         );
       }
@@ -488,30 +638,7 @@ class _PortalScreenState extends State<PortalScreen> {
 
   Future<void> _cambiarEstadoPedido(String id, String nuevoEstado) async {
     if (!_estaRastreando) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.location_off_rounded, color: Colors.white, size: 22),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text('⚠️ Debes activar el GPS para operar con este pedido.',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFDC2626),
-          duration: const Duration(seconds: 4),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          action: SnackBarAction(
-            label: 'ACTIVAR',
-            textColor: Colors.white,
-            onPressed: _iniciarRastreo,
-          ),
-        ),
-      );
+      await _mostrarCartelUbicacionRequerida();
       return;
     }
 
