@@ -220,8 +220,13 @@ class _PortalScreenState extends State<PortalScreen> {
       }
       await Future.delayed(const Duration(milliseconds: 250));
 
-      // 2. Reiniciar proceso nativo para cargar el nuevo parche de Shorebird
-      await Restart.restartApp();
+      // 2. Reiniciar proceso nativo forzando la terminación del PID viejo (forceKill)
+      // Esto fuerza un cold start limpio del proceso Linux, permitiendo que el motor
+      // de Shorebird inicialice y monte el nuevo parche descargado.
+      await Restart.restartApp(
+        mode: RestartMode.process,
+        forceKill: true,
+      );
     } catch (_) {
       SystemNavigator.pop();
     }
