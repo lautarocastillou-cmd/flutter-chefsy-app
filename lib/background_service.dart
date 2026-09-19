@@ -312,7 +312,7 @@ class GpsTaskHandler extends TaskHandler {
         batteryLevel = await _battery.batteryLevel;
       } catch (_) {}
 
-      final ráfagaAEnviar = List<Map<String, dynamic>>.from(_bufferPuntos);
+      final rafagaAEnviar = List<Map<String, dynamic>>.from(_bufferPuntos);
 
       final response = await http.post(
         Uri.parse(apiUrl),
@@ -329,15 +329,15 @@ class GpsTaskHandler extends TaskHandler {
           'heading': position.heading >= 0 ? position.heading : 0,
           'gps_activo': true,
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
-          if (ráfagaAEnviar.isNotEmpty) 'bufferPuntos': ráfagaAEnviar,
+          if (rafagaAEnviar.isNotEmpty) 'bufferPuntos': rafagaAEnviar,
         }),
       ).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         // Al confirmar entrega exitosa por el servidor, remover solo los puntos enviados
         // evitando descartar puntos nuevos capturados mientras la petición estuvo en vuelo
-        if (_bufferPuntos.length >= ráfagaAEnviar.length) {
-          _bufferPuntos.removeRange(0, ráfagaAEnviar.length);
+        if (_bufferPuntos.length >= rafagaAEnviar.length) {
+          _bufferPuntos.removeRange(0, rafagaAEnviar.length);
         } else {
           _bufferPuntos.clear();
         }
