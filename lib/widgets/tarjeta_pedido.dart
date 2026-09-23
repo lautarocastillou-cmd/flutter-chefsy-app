@@ -84,7 +84,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
     }
   }
 
-  void _mostrarFachada(BuildContext context) {
+  void _abrirFachadaDirecta(BuildContext context) async {
     final coords = pedido.coordenadas;
     if (coords == null || coords.latitud == 0.0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -93,133 +93,21 @@ class TarjetaPedidoCadete extends StatelessWidget {
       return;
     }
 
-    final panoUrl = Uri.parse('https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${coords.latitud},${coords.longitud}');
-    final imgProxyUrl = 'https://chefsy.xyz/api/streetview?lat=${coords.latitud}&lng=${coords.longitud}&image=true';
+    final panoUrl = Uri.parse(
+        'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${coords.latitud},${coords.longitud}');
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF0F172A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Fachada • ${pedido.cliente}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          pedido.direccion,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.white60,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white54),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.network(
-                    imgProxyUrl,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        color: Colors.black26,
-                        child: const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF10B981)),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.black38,
-                        padding: const EdgeInsets.all(16),
-                        child: const Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.camera_alt_outlined, color: Colors.white38, size: 36),
-                              SizedBox(height: 8),
-                              Text(
-                                'Vista satelital / 360 interactiva disponible',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white70, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  icon: const Icon(Icons.streetview, size: 18),
-                  label: const Text('Abrir Street View 360 en Maps', style: TextStyle(fontWeight: FontWeight.bold)),
-                  onPressed: () async {
-                    try {
-                      await launchUrl(panoUrl, mode: LaunchMode.externalApplication);
-                    } catch (_) {}
-                  },
-                ),
-              ),
-            ],
-          ),
+    try {
+      final lanzado = await launchUrl(panoUrl, mode: LaunchMode.externalApplication);
+      if (!lanzado) {
+        await launchUrl(panoUrl, mode: LaunchMode.platformDefault);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo abrir Street View en este dispositivo.')),
         );
-      },
-    );
+      }
+    }
   }
 
   @override
@@ -455,7 +343,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
                       if (pedido.coordenadas != null && pedido.coordenadas!.latitud != 0.0) ...[
                         const SizedBox(width: 8),
                         GestureDetector(
-                          onTap: () => _mostrarFachada(context),
+                          onTap: () => _abrirFachadaDirecta(context),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
@@ -469,7 +357,7 @@ class TarjetaPedidoCadete extends StatelessWidget {
                                 Icon(Icons.camera_alt_rounded, size: 12, color: Color(0xFF34D399)),
                                 SizedBox(width: 4),
                                 Text(
-                                  'Fachada',
+                                  'Fachada 360',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
