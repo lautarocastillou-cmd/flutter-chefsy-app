@@ -405,13 +405,33 @@ class TarjetaPedidoCadete extends StatelessWidget {
                             color: Colors.white54,
                             letterSpacing: 0.8),
                       ),
-                      if (pedido.distanciaKm != null)
-                        Text(
-                          '(${pedido.distanciaKm!.toStringAsFixed(1)} km)',
-                          style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF34D399)),
+                      if (pedido.distanciaKm != null && pedido.distanciaKm! > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.route_rounded, size: 11, color: Color(0xFF34D399)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${pedido.distanciaKm!.toStringAsFixed(1)} km',
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF34D399),
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                   ),

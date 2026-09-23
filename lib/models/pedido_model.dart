@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 class PedidoModel {
   final String id;
   final String cliente;
@@ -66,6 +68,16 @@ class PedidoModel {
       coords = CoordenadasModel.fromJson(Map<String, dynamic>.from(json['coordenadas']));
     }
 
+    double? dist = json['distanciaKm'] != null
+        ? double.tryParse(json['distanciaKm'].toString())
+        : (json['distancia_km'] != null
+            ? double.tryParse(json['distancia_km'].toString())
+            : null);
+
+    if (dist == null && coords != null && coords.latitud != 0.0) {
+      dist = calcularDistanciaLocal(coords.latitud, coords.longitud);
+    }
+
     return PedidoModel(
       id: json['id']?.toString() ?? '',
       cliente: json['cliente']?.toString() ?? 'Cliente',
@@ -73,9 +85,7 @@ class PedidoModel {
       hora: json['hora']?.toString() ?? '',
       estado: json['estado']?.toString() ?? '',
       direccion: json['direccion']?.toString() ?? 'Retiro en local',
-      distanciaKm: json['distanciaKm'] != null
-          ? double.tryParse(json['distanciaKm'].toString())
-          : null,
+      distanciaKm: dist,
       productos: items,
       total: double.tryParse(json['total']?.toString() ?? '0') ?? 0.0,
       costoEnvio: json['costoEnvio'] != null
@@ -88,6 +98,22 @@ class PedidoModel {
       observaciones: json['observaciones']?.toString() ?? '',
       coordenadas: coords,
     );
+  }
+
+  static double calcularDistanciaLocal(double lat, double lng) {
+    const double latLocal = -28.462809031658047;
+    const double lngLocal = -65.77850065400358;
+    const double r = 6371.0;
+    final dLat = (lat - latLocal) * (math.pi / 180.0);
+    final dLon = (lng - lngLocal) * (math.pi / 180.0);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(latLocal * (math.pi / 180.0)) *
+            math.cos(lat * (math.pi / 180.0)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    final distEstimada = r * c * 1.25;
+    return double.parse(distEstimada.toStringAsFixed(1));
   }
 
   static String formatearPrecio(double precio) {
