@@ -48,6 +48,7 @@ class ApiService {
         final montoBase = double.tryParse(data['monto_base']?.toString() ?? '0') ?? 0.0;
         final turnoActivo = data['turno_activo'] == true;
         return {
+          'ok': true,
           'pedidos': listPedidos
               .map((p) => PedidoModel.fromJson(Map<String, dynamic>.from(p)))
               .toList(),
@@ -59,7 +60,12 @@ class ApiService {
         };
       }
     } catch (_) {}
+
+    // Una falla de red no significa que el cadete no tenga pedidos. El
+    // llamador debe conservar la última respuesta válida y no reemplazarla
+    // por una lista vacía.
     return {
+      'ok': false,
       'pedidos': <PedidoModel>[],
       'pagos_extras': <PagoExtraModel>[],
       'monto_base': 0.0,

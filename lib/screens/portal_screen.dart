@@ -59,6 +59,8 @@ class _PortalScreenState extends State<PortalScreen> {
   int _ultimoCambioLocalMs = 0;
   final Set<String> _cambiandoEstadoIds = {};
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _cargaPedidosEnCurso = false;
+  bool _cargaPedidosPendiente = false;
 
   SharedPreferences? _prefs;
 
@@ -567,79 +569,101 @@ class _PortalScreenState extends State<PortalScreen> {
     }
   }
 
-  Future<void> _fetchPedidos() async {
-    setState(() => _cargandoPedidos = true);
-    final datos = await _apiService.fetchDatosTurno(widget.cadeteId);
-    if (mounted) {
-      setState(() {
-        _pedidosListos = datos['pedidos'] as List<PedidoModel>;
-        _pagosExtras = datos['pagos_extras'] as List<PagoExtraModel>;
-        _montoBase = datos['monto_base'] as double? ?? 0.0;
-        _turnoActivo = datos['turno_activo'] as bool? ?? false;
-        _cargandoPedidos = false;
-      });
+  Future<void> _fetchPedidos({bool silencioso = false}) async {
+    // Realtime, polling y acciones locales pueden pedir una actualización al
+    // mismo tiempo. No dejamos consultas concurrentes: una respuesta lenta
+    // no puede sobrescribir el resultado de una consulta más nueva.
+    if (_cargaPedidosEnCurso) {
+      _cargaPedidosPendiente = true;
+      return;
+    }
+
+    _cargaPedidosEnCurso = true;
+    if (!silencioso && mounted) {
+      setState(() => _cargandoPedidos = true);
+    }
+
+    try {
+      final datos = await _apiService.fetchDatosTurno(widget.cadeteId);
+
+      // `ok: false` representa timeout, error HTTP o respuesta ilegible.
+      // Mantener el estado anterior evita el parpadeo de pedidos que luego
+      // reaparecen cuando el siguiente polling logra conectarse.
+      if (datos['ok'] != true) return;
+
+      final list = datos['pedidos'] as List<PedidoModel>;
+      final extras = datos['pagos_extras'] as List<PagoExtraModel>;
+      final montoBase = datos['monto_base'] as double? ?? 0.0;
+      final turnoActivo = datos['turno_activo'] as bool? ?? false;
+
+      if (mounted) {
+        if (_alertasSonoras) {
+          final esCambioLocalReciente =
+              (DateTime.now().millisecondsSinceEpoch - _ultimoCambioLocalMs) < 6000;
+          if (!esCambioLocalReciente) {
+            final oldIds = _pedidosListos.map((p) => p.id).toSet();
+            final nuevos = list
+                .where((p) => p.estado != 'entregado' && !oldIds.contains(p.id))
+                .toList();
+            if (_pedidosListos.isNotEmpty && nuevos.isNotEmpty) {
+              SystemSound.play(SystemSoundType.alert);
+              HapticFeedback.heavyImpact();
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.delivery_dining, color: Colors.white, size: 28),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('🛵 ¡Nuevo Pedido Asignado!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            Text('${nuevos.first.cliente} • ${nuevos.first.direccion}', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFF059669),
+                  duration: const Duration(seconds: 5),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              );
+            }
+          }
+        }
+        final isRunning = await FlutterForegroundTask.isRunningService;
+        final rastreoHabilitado = _prefs?.getBool('rastreo_habilitado') ?? false;
+        final realmenteRastreando = isRunning && rastreoHabilitado;
+        setState(() {
+          _pedidosListos = list;
+          _pagosExtras = extras;
+          _montoBase = montoBase;
+          _turnoActivo = turnoActivo;
+          if (!realmenteRastreando && _estaRastreando) {
+            _estaRastreando = false;
+            _ultimaUbicacionTexto = 'Rastreo pausado.';
+          }
+        });
+      }
+    } finally {
+      _cargaPedidosEnCurso = false;
+      if (mounted && !silencioso) {
+        setState(() => _cargandoPedidos = false);
+      }
+
+      if (_cargaPedidosPendiente && mounted) {
+        _cargaPedidosPendiente = false;
+        unawaited(_fetchPedidos(silencioso: true));
+      }
     }
   }
 
-  Future<void> _fetchPedidosSilencioso() async {
-    final datos = await _apiService.fetchDatosTurno(widget.cadeteId);
-    final list = datos['pedidos'] as List<PedidoModel>;
-    final extras = datos['pagos_extras'] as List<PagoExtraModel>;
-    final montoBase = datos['monto_base'] as double? ?? 0.0;
-    final turnoActivo = datos['turno_activo'] as bool? ?? false;
-    if (mounted) {
-      if (_alertasSonoras) {
-        final esCambioLocalReciente =
-            (DateTime.now().millisecondsSinceEpoch - _ultimoCambioLocalMs) < 6000;
-        if (!esCambioLocalReciente) {
-          final oldIds = _pedidosListos.map((p) => p.id).toSet();
-          final nuevos = list.where((p) => p.estado != 'entregado' && !oldIds.contains(p.id)).toList();
-          if (_pedidosListos.isNotEmpty && nuevos.isNotEmpty) {
-            SystemSound.play(SystemSoundType.alert);
-            HapticFeedback.heavyImpact();
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.delivery_dining, color: Colors.white, size: 28),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('🛵 ¡Nuevo Pedido Asignado!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text('${nuevos.first.cliente} • ${nuevos.first.direccion}', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF059669),
-                duration: const Duration(seconds: 5),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-            );
-          }
-        }
-      }
-      final isRunning = await FlutterForegroundTask.isRunningService;
-      final rastreoHabilitado = _prefs?.getBool('rastreo_habilitado') ?? false;
-      final realmenteRastreando = isRunning && rastreoHabilitado;
-      setState(() {
-        _pedidosListos = list;
-        _pagosExtras = extras;
-        _montoBase = montoBase;
-        _turnoActivo = turnoActivo;
-        if (!realmenteRastreando && _estaRastreando) {
-          _estaRastreando = false;
-          _ultimaUbicacionTexto = 'Rastreo pausado.';
-        }
-      });
-    }
-  }
+  Future<void> _fetchPedidosSilencioso() => _fetchPedidos(silencioso: true);
 
   Future<void> _cambiarEstadoPedido(String id, String nuevoEstado) async {
     if (!_estaRastreando) {
