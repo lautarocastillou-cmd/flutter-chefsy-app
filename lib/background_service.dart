@@ -9,9 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 const String apiUrl = 'https://chefsy.xyz/api/public/ubicacion';
 const String secretToken = 'chefsy_expo_secure_track_99XQ';
 
-// El servicio sigue ejecutándose cada 4 segundos para reaccionar rápido a una
-// orden de Torre de Control, pero no hace falta escribir la misma coordenada
-// en la base con esa frecuencia.
+// El servicio sigue ejecutándose cada 4 segundos para evaluar movimiento y
+// pedidos, pero no hace falta escribir la misma coordenada con esa frecuencia.
 const Duration intervaloMinimoMovimiento = Duration(seconds: 15);
 const Duration heartbeatGpsQuieto = Duration(seconds: 60);
 const double distanciaMinimaMovimientoMetros = 8.0;
@@ -211,14 +210,14 @@ class GpsTaskHandler extends TaskHandler {
     if (simActiva) {
       _enviarUbicacionSimulada();
     } else {
-      // Modo Real: un heartbeat cada 60s si está quieto. Los movimientos
-      // significativos siguen enviándose con una latencia máxima de 15s.
-      final ahora = DateTime.now();
-      if (_ultimoReporteTime == null ||
-          ahora.difference(_ultimoReporteTime!) >= heartbeatGpsQuieto) {
-        if (_ultimaPosicionValida != null) {
-          _enviarUbicacionReal(_ultimaPosicionValida!, forzar: true);
-        } else {
+      // Revaluar el último punto en cada tick también envía un movimiento
+      // pendiente si el stream se detuvo justo antes de vencer el throttle.
+      if (_ultimaPosicionValida != null) {
+        _enviarUbicacionReal(_ultimaPosicionValida!);
+      } else {
+        final ahora = DateTime.now();
+        if (_ultimoReporteTime == null ||
+            ahora.difference(_ultimoReporteTime!) >= heartbeatGpsQuieto) {
           try {
             final pos = await Geolocator.getLastKnownPosition() ??
                 await Geolocator.getCurrentPosition(
@@ -235,6 +234,7 @@ class GpsTaskHandler extends TaskHandler {
 
   void _enviarUbicacionSimulada() async {
     if (_ocupado) return;
+    _ocupado = true;
 
     try {
       _prefs ??= await SharedPreferences.getInstance();
@@ -262,8 +262,6 @@ class GpsTaskHandler extends TaskHandler {
           : tiempoDesdeReporte < heartbeatGpsQuieto) {
         return;
       }
-
-      _ocupado = true;
 
       int? batteryLevel;
       try {
@@ -300,10 +298,16 @@ class GpsTaskHandler extends TaskHandler {
 
   void _encolarPuntoSiCorresponde(Position position, DateTime timestamp) {
     final ultimo = _bufferPuntos.isNotEmpty ? _bufferPuntos.last : null;
-    if (ultimo != null && ultimo['lat'] is num && ultimo['lng'] is num) {
+    final referencia = ultimo ?? (_ultimaPosicionEnviada == null
+        ? null
+        : {
+            'lat': _ultimaPosicionEnviada!.latitude,
+            'lng': _ultimaPosicionEnviada!.longitude,
+          });
+    if (referencia != null && referencia['lat'] is num && referencia['lng'] is num) {
       final distancia = Geolocator.distanceBetween(
-        (ultimo['lat'] as num).toDouble(),
-        (ultimo['lng'] as num).toDouble(),
+        (referencia['lat'] as num).toDouble(),
+        (referencia['lng'] as num).toDouble(),
         position.latitude,
         position.longitude,
       );
@@ -344,7 +348,8 @@ class GpsTaskHandler extends TaskHandler {
 
     // No se pierde ningún punto relevante: los puntos intermedios quedan en
     // _bufferPuntos y se envían junto con el próximo movimiento/heartbeat.
-    final puedeEnviarPorMovimiento = tiempoDesdeReporte >= intervaloMinimoMovimiento && seMovio;
+    final puedeEnviarPorMovimiento = tiempoDesdeReporte >= intervaloMinimoMovimiento &&
+        (seMovio || _bufferPuntos.isNotEmpty);
     final puedeEnviarHeartbeat = tiempoDesdeReporte >= heartbeatGpsQuieto;
     if (!forzar && !puedeEnviarPorMovimiento && !puedeEnviarHeartbeat) return;
 
