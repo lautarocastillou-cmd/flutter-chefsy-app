@@ -9,6 +9,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 const String apiUrl = 'https://chefsy.xyz/api/public/ubicacion';
 const String secretToken = 'chefsy_expo_secure_track_99XQ';
 
+// El servicio sigue ejecutándose cada 4 segundos para reaccionar rápido a una
+// orden de Torre de Control, pero no hace falta escribir la misma coordenada
+// en la base con esa frecuencia.
+const Duration intervaloMinimoMovimiento = Duration(seconds: 15);
+const Duration heartbeatGpsQuieto = Duration(seconds: 60);
+const double distanciaMinimaMovimientoMetros = 8.0;
+
 void initForegroundTask() {
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
@@ -39,6 +46,9 @@ class GpsTaskHandler extends TaskHandler {
   StreamSubscription<Position>? _positionStreamSub;
   DateTime? _ultimoReporteTime;
   Position? _ultimaPosicionValida;
+  Position? _ultimaPosicionEnviada;
+  double? _ultimaLatitudSimuladaEnviada;
+  double? _ultimaLongitudSimuladaEnviada;
   bool _simulacionActiva = false;
   final Battery _battery = Battery();
 
@@ -201,10 +211,11 @@ class GpsTaskHandler extends TaskHandler {
     if (simActiva) {
       _enviarUbicacionSimulada();
     } else {
-      // Modo Real: Heartbeat periódico cada 15 segundos si está quieto en el local
+      // Modo Real: un heartbeat cada 60s si está quieto. Los movimientos
+      // significativos siguen enviándose con una latencia máxima de 15s.
       final ahora = DateTime.now();
       if (_ultimoReporteTime == null ||
-          ahora.difference(_ultimoReporteTime!) >= const Duration(seconds: 15)) {
+          ahora.difference(_ultimoReporteTime!) >= heartbeatGpsQuieto) {
         if (_ultimaPosicionValida != null) {
           _enviarUbicacionReal(_ultimaPosicionValida!, forzar: true);
         } else {
@@ -224,7 +235,6 @@ class GpsTaskHandler extends TaskHandler {
 
   void _enviarUbicacionSimulada() async {
     if (_ocupado) return;
-    _ocupado = true;
 
     try {
       _prefs ??= await SharedPreferences.getInstance();
@@ -233,15 +243,36 @@ class GpsTaskHandler extends TaskHandler {
 
       final double lat = _liveSimLat ?? _prefs?.getDouble('sim_lat') ?? -28.46281;
       final double lng = _liveSimLng ?? _prefs?.getDouble('sim_lng') ?? -65.77850;
+      final ahora = DateTime.now();
+      final tiempoDesdeReporte = _ultimoReporteTime == null
+          ? heartbeatGpsQuieto
+          : ahora.difference(_ultimoReporteTime!);
+      final distanciaDesdeUltimoEnvio = _ultimaLatitudSimuladaEnviada == null ||
+              _ultimaLongitudSimuladaEnviada == null
+          ? double.infinity
+          : Geolocator.distanceBetween(
+              _ultimaLatitudSimuladaEnviada!,
+              _ultimaLongitudSimuladaEnviada!,
+              lat,
+              lng,
+            );
+      final seMovio = distanciaDesdeUltimoEnvio >= distanciaMinimaMovimientoMetros;
+      if (seMovio
+          ? tiempoDesdeReporte < intervaloMinimoMovimiento
+          : tiempoDesdeReporte < heartbeatGpsQuieto) {
+        return;
+      }
+
+      _ocupado = true;
 
       int? batteryLevel;
       try {
         batteryLevel = await _battery.batteryLevel;
       } catch (_) {}
 
-      _ultimoReporteTime = DateTime.now();
+      _ultimoReporteTime = ahora;
 
-      await http.post(
+      final res = await http.post(
         Uri.parse(apiUrl),
         headers: {
           'Content-Type': 'application/json',
@@ -257,42 +288,69 @@ class GpsTaskHandler extends TaskHandler {
           if (batteryLevel != null) 'batteryLevel': batteryLevel,
         }),
       ).timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        _ultimaLatitudSimuladaEnviada = lat;
+        _ultimaLongitudSimuladaEnviada = lng;
+      }
     } catch (_) {
     } finally {
       _ocupado = false;
     }
   }
 
-  void _enviarUbicacionReal(Position position, {bool forzar = false}) async {
-    final ahora = DateTime.now();
-    if (!forzar &&
-        _ultimoReporteTime != null &&
-        ahora.difference(_ultimoReporteTime!) < const Duration(seconds: 3)) {
-      return;
+  void _encolarPuntoSiCorresponde(Position position, DateTime timestamp) {
+    final ultimo = _bufferPuntos.isNotEmpty ? _bufferPuntos.last : null;
+    if (ultimo != null && ultimo['lat'] is num && ultimo['lng'] is num) {
+      final distancia = Geolocator.distanceBetween(
+        (ultimo['lat'] as num).toDouble(),
+        (ultimo['lng'] as num).toDouble(),
+        position.latitude,
+        position.longitude,
+      );
+      if (distancia < distanciaMinimaMovimientoMetros) return;
     }
-    _ultimoReporteTime = ahora;
 
-    // 1. Encolar siempre el nuevo punto capturado con su timestamp real
-    final puntoCapturado = {
+    _bufferPuntos.add({
       'lat': position.latitude,
       'lng': position.longitude,
       'accuracy': position.accuracy,
       'speed': position.speed >= 0 ? position.speed : 0,
       'heading': position.heading >= 0 ? position.heading : 0,
-      't': ahora.toUtc().toIso8601String(),
-    };
-
-    if (_bufferPuntos.isEmpty ||
-        (_bufferPuntos.last['lat'] != puntoCapturado['lat'] ||
-         _bufferPuntos.last['lng'] != puntoCapturado['lng'])) {
-      _bufferPuntos.add(puntoCapturado);
-      if (_bufferPuntos.length > 50) {
-        _bufferPuntos.removeAt(0);
-      }
+      't': timestamp.toUtc().toIso8601String(),
+    });
+    if (_bufferPuntos.length > 50) {
+      _bufferPuntos.removeAt(0);
     }
+  }
+
+  void _enviarUbicacionReal(Position position, {bool forzar = false}) async {
+    final ahora = DateTime.now();
+    _encolarPuntoSiCorresponde(position, ahora);
+
+    final ultimoReporte = _ultimoReporteTime;
+    final tiempoDesdeReporte = ultimoReporte == null
+        ? heartbeatGpsQuieto
+        : ahora.difference(ultimoReporte);
+    final ultimaPosicion = _ultimaPosicionEnviada;
+    final distanciaDesdeUltimoEnvio = ultimaPosicion == null
+        ? double.infinity
+        : Geolocator.distanceBetween(
+            ultimaPosicion.latitude,
+            ultimaPosicion.longitude,
+            position.latitude,
+            position.longitude,
+          );
+    final seMovio = distanciaDesdeUltimoEnvio >= distanciaMinimaMovimientoMetros;
+
+    // No se pierde ningún punto relevante: los puntos intermedios quedan en
+    // _bufferPuntos y se envían junto con el próximo movimiento/heartbeat.
+    final puedeEnviarPorMovimiento = tiempoDesdeReporte >= intervaloMinimoMovimiento && seMovio;
+    final puedeEnviarHeartbeat = tiempoDesdeReporte >= heartbeatGpsQuieto;
+    if (!forzar && !puedeEnviarPorMovimiento && !puedeEnviarHeartbeat) return;
 
     if (_ocupado) return;
     _ocupado = true;
+    _ultimoReporteTime = ahora;
 
     try {
       _prefs ??= await SharedPreferences.getInstance();
@@ -341,6 +399,8 @@ class GpsTaskHandler extends TaskHandler {
         } else {
           _bufferPuntos.clear();
         }
+
+        _ultimaPosicionEnviada = position;
 
         final data = jsonDecode(response.body);
         if (data['comando'] == 'apagar_gps' || data['gps_activo'] == false) {
