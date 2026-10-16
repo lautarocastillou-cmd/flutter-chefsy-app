@@ -9,11 +9,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 const String apiUrl = 'https://chefsy.xyz/api/public/ubicacion';
 const String secretToken = 'chefsy_expo_secure_track_99XQ';
 
-// El servicio sigue ejecutándose cada 4 segundos para evaluar movimiento y
-// pedidos, pero no hace falta escribir la misma coordenada con esa frecuencia.
-const Duration intervaloMinimoMovimiento = Duration(seconds: 15);
+// En movimiento se reporta cada 2.5s y 3m para un tracking fluido en vivo.
+// Estando detenido, entra en reposo enviando solo un heartbeat cada 60s para ahorrar batería y cuota.
+const Duration intervaloMinimoMovimiento = Duration(milliseconds: 2500);
 const Duration heartbeatGpsQuieto = Duration(seconds: 60);
-const double distanciaMinimaMovimientoMetros = 8.0;
+const double distanciaMinimaMovimientoMetros = 3.0;
 
 void initForegroundTask() {
   FlutterForegroundTask.init(
@@ -95,7 +95,7 @@ class GpsTaskHandler extends TaskHandler {
         final positionStream = Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 5,
+            distanceFilter: 3,
           ),
         );
 
