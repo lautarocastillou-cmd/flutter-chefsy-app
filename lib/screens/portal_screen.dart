@@ -120,7 +120,7 @@ class _PortalScreenState extends State<PortalScreen> {
     });
 
     _pollingTimer = Timer.periodic(
-        const Duration(seconds: 15), (_) => _fetchPedidosSilencioso());
+        const Duration(seconds: 3), (_) => _fetchPedidosSilencioso());
     // Rendimiento y ranking se actualizan de fondo cada 5 minutos (evita miles de consultas pesadas de telemetría)
     _rendimientoTimer = Timer.periodic(
         const Duration(minutes: 5), (_) => _cargarRendimiento());
