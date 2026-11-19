@@ -58,6 +58,7 @@ class _PortalScreenState extends State<PortalScreen> {
   double _simLat = -28.46281; // Coordenadas reales del local Chefsy
   double _simLng = -65.77850;
   Timer? _joystickTimer;
+  Timer? _tapResetTimer;
   String _vistaActiva = 'activos';
   bool _alertasSonoras = true;
   int _ultimoCambioLocalMs = 0;
@@ -778,7 +779,7 @@ class _PortalScreenState extends State<PortalScreen> {
                           const Text('Pago pendiente de verificación',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           Text(
-                            'Monto: \${n['monto'] ?? '-'} · ${n['metodo'] ?? '-'}',
+                            'Monto: ${n['monto'] ?? '-'} | ${n['metodo'] ?? '-'}',
                             style: const TextStyle(fontSize: 11),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -852,7 +853,7 @@ class _PortalScreenState extends State<PortalScreen> {
                           const Text('Pago de local pendiente',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           Text(
-                            'Cadete: ${n['cadete_nombre'] ?? '-'} · Monto: \${n['monto'] ?? '-'}',
+                            'Cadete: ${n['cadete_nombre'] ?? '-'} | Monto: ${n['monto'] ?? '-'}',
                             style: const TextStyle(fontSize: 11),
                             overflow: TextOverflow.ellipsis,
                           ),
