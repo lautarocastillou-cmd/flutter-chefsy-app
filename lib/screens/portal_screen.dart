@@ -1206,7 +1206,7 @@ class _PortalScreenState extends State<PortalScreen> {
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                             icon: const Icon(
-                              Icons.description_rounded,
+                              Icons.history_rounded,
                               size: 20,
                               color: Colors.white38,
                             ),
@@ -1243,8 +1243,8 @@ class _PortalScreenState extends State<PortalScreen> {
                                   Icon(
                                     (_rendimientoData?.miHoy.esMasRapido ==
                                             true)
-                                        ? Icons.emoji_events_rounded
-                                        : Icons.speed_rounded,
+                                        ? Icons.assignment_rounded
+                                        : Icons.list_alt_rounded,
                                     size: 14,
                                     color: (_rendimientoData
                                                 ?.miHoy.esMasRapido ==
@@ -1729,7 +1729,7 @@ class _PortalScreenState extends State<PortalScreen> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Icon(
-                                      Icons.query_stats_rounded,
+                                      Icons.summarize_rounded,
                                       size: 16,
                                       color: Color(0xFF34D399),
                                     ),
