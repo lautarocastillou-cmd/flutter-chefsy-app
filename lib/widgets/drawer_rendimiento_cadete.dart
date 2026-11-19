@@ -35,45 +35,28 @@ class _DrawerRendimientoCadeteState extends State<DrawerRendimientoCadete> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.speed_rounded,
-                          color: Color(0xFF34D399),
-                          size: 22,
+                      const Text(
+                        'Rendimiento & Registro',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Rendimiento & Registro',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            rend?.esDesdeCache == true
-                                ? 'Copia local sin conexión'
-                                : 'Telemetría de velocidad',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: rend?.esDesdeCache == true
-                                  ? Colors.amberAccent
-                                  : Colors.white54,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        rend?.esDesdeCache == true
+                            ? 'Copia local sin conexión'
+                            : 'Telemetría de velocidad',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: rend?.esDesdeCache == true
+                              ? Colors.amberAccent
+                              : Colors.white54,
+                        ),
                       ),
                     ],
                   ),
@@ -162,7 +145,7 @@ class _DrawerRendimientoCadeteState extends State<DrawerRendimientoCadete> {
                           ),
                           const SizedBox(height: 18),
                           _construirSeccionRanking(
-                            titulo: '🏆 REGISTRO DE LA JORNADA',
+                            titulo: 'REGISTRO DE LA JORNADA',
                             ranking: rend.rankingHoy,
                             cadeteActualId: rend.cadeteId,
                           ),
@@ -187,7 +170,7 @@ class _DrawerRendimientoCadeteState extends State<DrawerRendimientoCadete> {
                           ),
                           const SizedBox(height: 18),
                           _construirSeccionRanking(
-                            titulo: '🏆 REGISTRO SEMANAL',
+                            titulo: 'REGISTRO SEMANAL',
                             ranking: rend.rankingSemana,
                             cadeteActualId: rend.cadeteId,
                           ),
@@ -755,7 +738,7 @@ class _DrawerRendimientoCadeteState extends State<DrawerRendimientoCadete> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '📅 HISTORIAL DE SEMANAS (SUPABASE)',
+          'HISTORIAL DE SEMANAS (SUPABASE)',
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w800,

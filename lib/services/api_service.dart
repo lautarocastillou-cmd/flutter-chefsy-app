@@ -170,6 +170,26 @@ class ApiService {
     }
   }
 
+  // --- Consultar Changelog de la app ---
+  Future<List<Map<String, dynamic>>?> fetchChangelog() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_baseUrl/api/app/changelog'),
+        headers: {'Authorization': 'Bearer $_token'},
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['ok'] == true && data['versiones'] is List) {
+          return List<Map<String, dynamic>>.from(
+            (data['versiones'] as List).map((v) => Map<String, dynamic>.from(v)),
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // --- Consultar Rendimiento, Velocidad y Ranking Semanal ---
   Future<RendimientoCompletoData?> fetchRendimientoCadete(String cadeteId) async {
     final cacheKey = 'cache_rendimiento_$cadeteId';

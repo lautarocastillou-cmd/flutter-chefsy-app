@@ -14,6 +14,7 @@ import '../services/auth_service.dart';
 import '../widgets/tarjeta_pedido.dart';
 import '../widgets/tarjeta_pago_extra.dart';
 import '../widgets/drawer_rendimiento_cadete.dart';
+import '../widgets/changelog_log.dart';
 import '../models/rendimiento_model.dart';
 import '../background_service.dart';
 import '../services/updater_service.dart';
@@ -44,6 +45,7 @@ class _PortalScreenState extends State<PortalScreen> {
   String _ultimaUbicacionTexto = 'Esperando señal GPS...';
   Timer? _pollingTimer;
   Timer? _rendimientoTimer;
+  Timer? _notificacionesTimer;
   RealtimeChannel? _pedidosChannel;
   RealtimeChannel? _extrasChannel;
   RealtimeChannel? _turnosChannel;
@@ -51,6 +53,8 @@ class _PortalScreenState extends State<PortalScreen> {
   bool _turnoActivo = false;
   bool _mostrarControlesSimulacion = false;
   bool _simulacionActiva = false;
+  bool _modoVerificacionPagos = false;
+  int _tapCountLogo = 0;
   double _simLat = -28.46281; // Coordenadas reales del local Chefsy
   double _simLng = -65.77850;
   Timer? _joystickTimer;
@@ -124,6 +128,9 @@ class _PortalScreenState extends State<PortalScreen> {
     // Rendimiento y ranking se actualizan de fondo cada 5 minutos (evita miles de consultas pesadas de telemetría)
     _rendimientoTimer = Timer.periodic(
         const Duration(minutes: 5), (_) => _cargarRendimiento());
+    // Escucha silenciosa de notificaciones de pago (modo verificación interna)
+    _notificacionesTimer = Timer.periodic(
+        const Duration(minutes: 5), (_) => _consultarNotificacionesPagos());
     _pedidosChannel = Supabase.instance.client
         .channel('public:pedidos:cadete_${widget.cadeteId}')
         .onPostgresChanges(
@@ -160,6 +167,8 @@ class _PortalScreenState extends State<PortalScreen> {
   void dispose() {
     _pollingTimer?.cancel();
     _rendimientoTimer?.cancel();
+    _notificacionesTimer?.cancel();
+    _tapResetTimer?.cancel();
     _pedidosChannel?.unsubscribe();
     _extrasChannel?.unsubscribe();
     _turnosChannel?.unsubscribe();
@@ -733,6 +742,71 @@ class _PortalScreenState extends State<PortalScreen> {
     }
   }
 
+  // ── Escucha silenciosa de notificaciones de pago (modo verificación interna) ──
+  Future<void> _consultarNotificacionesPagos() async {
+    if (!_modoVerificacionPagos) return;
+    try {
+      final res = await http.get(
+        Uri.parse('https://chefsy.xyz/api/notificaciones-pagos?cadeteId=${widget.cadeteId}&noLeidas=1'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['ok'] == true && data['notificaciones'] is List) {
+          final lista = data['notificaciones'] as List;
+          if (lista.isNotEmpty && mounted) {
+            final n = lista.first;
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.payment_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Pago pendiente de verificación',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(
+                            'Monto: \${n['monto'] ?? '-'} · ${n['metodo'] ?? '-'}',
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFFF59E0B),
+                duration: const Duration(seconds: 6),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                action: SnackBarAction(
+                  label: 'Ver historial',
+                  textColor: Colors.white,
+                  onPressed: _mostrarChangelog,
+                ),
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _mostrarChangelog() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ChangelogLog()),
+    );
+  }
+
   Future<void> _cambiarMetodoPagoPedido(String id, String nuevoMetodo, bool pagoConfirmado) async {
     // Actualización optimista inmediata en memoria
     setState(() {
@@ -933,51 +1007,47 @@ class _PortalScreenState extends State<PortalScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       GestureDetector(
-                        onDoubleTap: () {
-                          setState(() {
-                            _mostrarControlesSimulacion = !_mostrarControlesSimulacion;
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(_mostrarControlesSimulacion
-                                  ? '🛠️ Panel Dev Activado'
-                                  : '🛠️ Panel Dev Oculto'),
-                              duration: const Duration(seconds: 1),
-                            ),
-                          );
+                        onTap: () {
+                          _tapCountLogo++;
+                          if (_tapCountLogo == 1) {
+                            _tapResetTimer = Timer(const Duration(seconds: 1), () {
+                              if (mounted) setState(() => _tapCountLogo = 0);
+                            });
+                          } else if (_tapCountLogo == 2) {
+                            _tapResetTimer?.cancel();
+                            setState(() {
+                              _mostrarControlesSimulacion = !_mostrarControlesSimulacion;
+                              _tapCountLogo = 0;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(_mostrarControlesSimulacion
+                                    ? '🛠️ Panel Dev Activado'
+                                    : '🛠️ Panel Dev Oculto'),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          } else if (_tapCountLogo >= 3) {
+                            _tapResetTimer?.cancel();
+                            setState(() {
+                              _modoVerificacionPagos = !_modoVerificacionPagos;
+                              _tapCountLogo = 0;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(_modoVerificacionPagos
+                                    ? '🔐 Modo verificación de pagos ACTIVADO'
+                                    : '🔐 Modo verificación de pagos DESACTIVADO'),
+                                duration: const Duration(seconds: 2),
+                                backgroundColor: const Color(0xFF1E293B),
+                              ),
+                            );
+                          }
                         },
                         child: Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(9),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.25),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.asset(
-                                  'assets/logo.png',
-                                  height: 24,
-                                  width: 24,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.restaurant_menu,
-                                    size: 20,
-                                    color: Color(0xFF014B44),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Text('Chefsy 🛵',
+                            const SizedBox(width: 4),
+                            const Text('Chefsy',
                                 style: TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize: 22,
@@ -1022,6 +1092,19 @@ class _PortalScreenState extends State<PortalScreen> {
                                   : Colors.white38,
                             ),
                             onPressed: _toggleAlertas,
+                          ),
+                          const SizedBox(width: 8),
+                          // 1.5. Changelog (oculto para control interno)
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(
+                              Icons.description_rounded,
+                              size: 20,
+                              color: Colors.white38,
+                            ),
+                            onPressed: _mostrarChangelog,
+                            tooltip: 'Historial de actualizaciones',
                           ),
                           const SizedBox(width: 12),
                           // 2. Botón Registro (Contra la esquina derecha, abre barra lateral)
