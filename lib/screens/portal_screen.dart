@@ -128,9 +128,10 @@ class _PortalScreenState extends State<PortalScreen> {
     // Rendimiento y ranking se actualizan de fondo cada 5 minutos (evita miles de consultas pesadas de telemetría)
     _rendimientoTimer = Timer.periodic(
         const Duration(minutes: 5), (_) => _cargarRendimiento());
-    // Notificaciones de pago: polling ligero cada 30s solo cuando el modo de verificación está activo
+    // Notificaciones de pago: polling ligero cada 10s solo cuando el modo de verificación está activo
+    // (HTTP normal, no usa Supabase Realtime ni satura la cuota free)
     _notificacionesTimer = Timer.periodic(
-        const Duration(seconds: 30), (_) => _consultarTodasNotificaciones());
+        const Duration(seconds: 10), (_) => _consultarTodasNotificaciones());
     _pedidosChannel = Supabase.instance.client
         .channel('public:pedidos:cadete_${widget.cadeteId}')
         .onPostgresChanges(
