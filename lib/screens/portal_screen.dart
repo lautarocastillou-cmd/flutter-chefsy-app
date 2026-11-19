@@ -128,9 +128,9 @@ class _PortalScreenState extends State<PortalScreen> {
     // Rendimiento y ranking se actualizan de fondo cada 5 minutos (evita miles de consultas pesadas de telemetría)
     _rendimientoTimer = Timer.periodic(
         const Duration(minutes: 5), (_) => _cargarRendimiento());
-    // Escucha silenciosa de notificaciones de pago (modo verificación interna)
+    // Notificaciones de pago: polling ligero cada 30s solo cuando el modo de verificación está activo
     _notificacionesTimer = Timer.periodic(
-        const Duration(minutes: 5), (_) => _consultarNotificacionesPagos());
+        const Duration(seconds: 30), (_) => _consultarTodasNotificaciones());
     _pedidosChannel = Supabase.instance.client
         .channel('public:pedidos:cadete_${widget.cadeteId}')
         .onPostgresChanges(
@@ -743,6 +743,7 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   // ── Escucha silenciosa de notificaciones de pago (modo verificación interna) ──
+  // Polling ligero cada 30s (HTTP normal, no usa Supabase Realtime ni satura la cuota free).
   Future<void> _consultarNotificacionesPagos() async {
     if (!_modoVerificacionPagos) return;
     try {
@@ -760,6 +761,7 @@ class _PortalScreenState extends State<PortalScreen> {
           final lista = data['notificaciones'] as List;
           if (lista.isNotEmpty && mounted) {
             final n = lista.first;
+            final id = n['id']?.toString() ?? '';
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -785,7 +787,7 @@ class _PortalScreenState extends State<PortalScreen> {
                   ],
                 ),
                 backgroundColor: const Color(0xFFF59E0B),
-                duration: const Duration(seconds: 6),
+                duration: const Duration(seconds: 8),
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 action: SnackBarAction(
@@ -795,10 +797,91 @@ class _PortalScreenState extends State<PortalScreen> {
                 ),
               ),
             );
+            // Marcar como leída para no repetirla en el próximo polling
+            if (id.isNotEmpty) _marcarNotificacionLeida(id);
           }
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _marcarNotificacionLeida(String id) async {
+    try {
+      await http.patch(
+        Uri.parse('https://chefsy.xyz/api/notificaciones-pagos?id=$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
+        },
+      ).timeout(const Duration(seconds: 8));
+    } catch (_) {}
+  }
+
+  // ── Consulta de pagos de local / retiro (sin filtro de cadete) ──
+  Future<void> _consultarNotificacionesLocal() async {
+    if (!_modoVerificacionPagos) return;
+    try {
+      final res = await http.get(
+        Uri.parse('https://chefsy.xyz/api/notificaciones-pagos?noLeidas=1'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['ok'] == true && data['notificaciones'] is List) {
+          final lista = data['notificaciones'] as List;
+          if (lista.isNotEmpty && mounted) {
+            final n = lista.first;
+            final id = n['id']?.toString() ?? '';
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.payment_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Pago de local pendiente',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(
+                            'Cadete: ${n['cadete_nombre'] ?? '-'} · Monto: \${n['monto'] ?? '-'}',
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFFF59E0B),
+                duration: const Duration(seconds: 8),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                action: SnackBarAction(
+                  label: 'Ver historial',
+                  textColor: Colors.white,
+                  onPressed: _mostrarChangelog,
+                ),
+              ),
+            );
+            if (id.isNotEmpty) _marcarNotificacionLeida(id);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Consulta pagos de cadete y de local en un solo ciclo de polling
+  Future<void> _consultarTodasNotificaciones() async {
+    await _consultarNotificacionesPagos();
+    await _consultarNotificacionesLocal();
   }
 
   void _mostrarChangelog() {
