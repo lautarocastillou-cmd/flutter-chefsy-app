@@ -342,6 +342,20 @@ class TarjetaPedidoCadete extends StatelessWidget {
                       ),
                       const Icon(Icons.navigation_rounded,
                           size: 16, color: Colors.white38),
+                      GestureDetector(
+                        onTap: () => _mostrarDireccionCompleta(context),
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Text(
+                            'Mostrar más',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF34D399),
+                            ),
+                          ),
+                        ),
+                      ),
                       if (pedido.coordenadas != null && pedido.coordenadas!.latitud != 0.0) ...[
                         const SizedBox(width: 8),
                         GestureDetector(
