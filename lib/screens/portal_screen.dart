@@ -552,7 +552,7 @@ class _PortalScreenState extends State<PortalScreen> {
     }
   }
 
-  void _toggleRastreo() {
+  void _toggleRastreo() async {
     if (_estaRastreando) {
       showDialog(
         context: context,
@@ -576,6 +576,28 @@ class _PortalScreenState extends State<PortalScreen> {
         ),
       );
     } else {
+      // Verificar si hay actualización pendiente antes de activar
+      final updaterService = UpdaterService();
+      final tieneActualizacion = await updaterService.tieneActualizacionPendiente();
+      
+      if (tieneActualizacion) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('⚠️ Actualización pendiente'),
+            content: const Text(
+                'Hay una actualización pendiente. Por favor, reiniciá la app para aplicarla antes de activar el rastreo.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Ok'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      
       _iniciarRastreo();
     }
   }

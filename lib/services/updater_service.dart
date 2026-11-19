@@ -8,6 +8,23 @@ import 'package:shorebird_code_push/shorebird_code_push.dart';
 class UpdaterService {
   final ShorebirdUpdater _shorebirdUpdater = ShorebirdUpdater();
 
+  /// Verifica si hay una actualización de Shorebird pendiente (parche descargado pero no aplicado)
+  /// o si hay una actualización disponible para descargar.
+  /// Retorna true si hay actualización pendiente que requiere reinicio.
+  Future<bool> tieneActualizacionPendiente() async {
+    try {
+      if (_shorebirdUpdater.isAvailable) {
+        final status = await _shorebirdUpdater.checkForUpdate();
+        // Si el status es restartRequired, significa que hay un parche descargado esperando reinicio
+        // Si el status es outdated, significa que hay un parche disponible para descargar
+        return status == UpdateStatus.restartRequired || status == UpdateStatus.outdated;
+      }
+    } catch (e) {
+      debugPrint('[Shorebird] Error al verificar actualización pendiente: $e');
+    }
+    return false;
+  }
+
   /// Verifica automáticamente si hay parches de Shorebird o nuevas versiones de APK disponibles.
   /// Llama a [onStatus] con un mensaje descriptivo y un booleano indicando si está listo para reiniciar.
   Future<void> verificarYDescargarActualizaciones({
