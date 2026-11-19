@@ -332,6 +332,8 @@ class TarjetaPedidoCadete extends StatelessWidget {
                       Expanded(
                         child: Text(
                           pedido.direccion,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
