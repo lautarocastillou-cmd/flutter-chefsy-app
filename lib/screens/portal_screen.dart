@@ -15,6 +15,7 @@ import '../widgets/tarjeta_pedido.dart';
 import '../widgets/tarjeta_pago_extra.dart';
 import '../widgets/drawer_rendimiento_cadete.dart';
 import '../widgets/changelog_log.dart';
+import '../widgets/bloqueo_cadete_eliminado.dart';
 import '../models/rendimiento_model.dart';
 import '../background_service.dart';
 import '../services/updater_service.dart';
@@ -63,9 +64,14 @@ class _PortalScreenState extends State<PortalScreen> {
   bool _alertasSonoras = true;
   int _ultimoCambioLocalMs = 0;
   final Set<String> _cambiandoEstadoIds = {};
+  final Set<String> _idsNotificacionesVistas = {};
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _cargaPedidosEnCurso = false;
   bool _cargaPedidosPendiente = false;
+  
+  // Estado de bloqueo por cadete eliminado
+  bool _cadeteEliminado = false;
+  String _motivoBloqueo = '';
 
   SharedPreferences? _prefs;
 
@@ -79,6 +85,9 @@ class _PortalScreenState extends State<PortalScreen> {
   bool _cargandoRendimiento = false;
 
   Future<void> _cargarRendimiento() async {
+    // Bloquear si el cadete fue eliminado
+    if (_cadeteEliminado) return;
+    
     if (_cargandoRendimiento) return;
     _cargandoRendimiento = true;
     try {
@@ -100,7 +109,20 @@ class _PortalScreenState extends State<PortalScreen> {
   @override
   void initState() {
     super.initState();
-    _cargarDatos();
+    
+    // Verificar si el cadete está activo ANTES de cargar cualquier dato
+    _verificarCadeteActivo().then((_) {
+      if (!_cadeteEliminado) {
+        _cargarDatos();
+      }
+    });
+
+    // Verificar periódicamente cada 5 minutos
+    Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (mounted) {
+        _verificarCadeteActivo();
+      }
+    });
 
     // Escuchar órdenes de segundo plano (ej: kill switch de Torre de Control)
     FlutterForegroundTask.addTaskDataCallback((data) {
@@ -176,6 +198,31 @@ class _PortalScreenState extends State<PortalScreen> {
     _turnosChannel?.unsubscribe();
     _joystickTimer?.cancel();
     super.dispose();
+  }
+
+  // Verifica si el cadete sigue activo en el sistema
+  Future<void> _verificarCadeteActivo() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://chefsy.xyz/api/cadetes/verificar-estado?cadeteId=${widget.cadeteId}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['eliminado'] == true) {
+          setState(() {
+            _cadeteEliminado = true;
+            _motivoBloqueo = data['motivo'] ?? 'Cadete eliminado del sistema';
+          });
+        }
+      }
+    } catch (_) {
+      // Si falla la verificación, no bloqueamos (por si hay problemas de red)
+    }
   }
 
   Future<void> _cargarDatos() async {
@@ -428,6 +475,17 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   Future<void> _iniciarRastreo() async {
+    // Bloquear si el cadete fue eliminado
+    if (_cadeteEliminado) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No puedes activar el rastreo: cuenta desactivada'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final notifPerm = await FlutterForegroundTask.checkNotificationPermission();
     if (notifPerm != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
@@ -553,6 +611,17 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   void _toggleRastreo() async {
+    // Bloquear si el cadete fue eliminado
+    if (_cadeteEliminado) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No puedes usar esta función: cuenta desactivada'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     if (_estaRastreando) {
       showDialog(
         context: context,
@@ -603,6 +672,9 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   Future<void> _fetchPedidos({bool silencioso = false}) async {
+    // Bloquear si el cadete fue eliminado
+    if (_cadeteEliminado) return;
+
     // Realtime, polling y acciones locales pueden pedir una actualización al
     // mismo tiempo. No dejamos consultas concurrentes: una respuesta lenta
     // no puede sobrescribir el resultado de una consulta más nueva.
@@ -767,64 +839,110 @@ class _PortalScreenState extends State<PortalScreen> {
   }
 
   // ── Escucha silenciosa de notificaciones de pago (modo verificación interna) ──
-  // Polling ligero cada 30s (HTTP normal, no usa Supabase Realtime ni satura la cuota free).
+  // 100% Dart (compatible con parche Shorebird OTA sin reinstalar APK).
   Future<void> _consultarNotificacionesPagos() async {
-    if (!_modoVerificacionPagos) return;
+    if (_cadeteEliminado || !_modoVerificacionPagos) return;
     try {
       final res = await http.get(
-        Uri.parse('https://chefsy.xyz/api/notificaciones-pagos?cadeteId=${widget.cadeteId}&noLeidas=1'),
+        Uri.parse('https://chefsy.xyz/api/notificaciones-pagos?noLeidas=1&limit=10'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
         },
       ).timeout(const Duration(seconds: 8));
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['ok'] == true && data['notificaciones'] is List) {
-          final lista = data['notificaciones'] as List;
-          if (lista.isNotEmpty && mounted) {
-            final n = lista.first;
-            final id = n['id']?.toString() ?? '';
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.payment_rounded, color: Colors.white, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Pago pendiente de verificación',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text(
-                            'Monto: ${n['monto'] ?? '-'} | ${n['metodo'] ?? '-'}',
-                            style: const TextStyle(fontSize: 11),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+      if (res.statusCode != 200) return;
+      final data = jsonDecode(res.body);
+      if (data['ok'] != true || data['notificaciones'] is! List) return;
+
+      final lista = data['notificaciones'] as List;
+      final miCadete = widget.cadeteId.trim().toLowerCase();
+      final misPedidosIds = _pedidosListos.map((p) => p.id).toSet();
+
+      for (final raw in lista) {
+        if (raw is! Map) continue;
+        final id = raw['id']?.toString() ?? '';
+        if (id.isEmpty || _idsNotificacionesVistas.contains(id)) continue;
+
+        final notifCadete = (raw['cadete_id']?.toString() ?? '').trim().toLowerCase();
+        final pedidoId = raw['pedido_id']?.toString() ?? '';
+        final esRelevante = notifCadete == miCadete ||
+            notifCadete == 'local' ||
+            notifCadete.isEmpty ||
+            (pedidoId.isNotEmpty && misPedidosIds.contains(pedidoId));
+        if (!esRelevante) continue;
+
+        _idsNotificacionesVistas.add(id);
+        final montoNum = (raw['monto'] is num)
+            ? (raw['monto'] as num).toDouble()
+            : double.tryParse(raw['monto']?.toString() ?? '') ?? 0;
+        final montoTexto = montoNum > 0
+            ? '\$${montoNum.toStringAsFixed(montoNum.truncateToDouble() == montoNum ? 0 : 2)}'
+            : (raw['monto']?.toString() ?? '-');
+        final billetera = (raw['billetera']?.toString().trim().isNotEmpty == true)
+            ? raw['billetera'].toString().trim()
+            : (raw['metodo']?.toString() ?? 'Transferencia');
+        final remitente = raw['remitente']?.toString().trim() ?? '';
+        final pedidoCliente = raw['pedido_cliente']?.toString().trim() ?? '';
+        final detalleExtra = [
+          billetera,
+          if (remitente.isNotEmpty) 'De: $remitente',
+          if (pedidoCliente.isNotEmpty) 'Pedido: $pedidoCliente',
+        ].join(' · ');
+
+        final tienePedidoPropio = pedidoId.isNotEmpty && misPedidosIds.contains(pedidoId);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Transferencia recibida · $montoTexto',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          detalleExtra,
+                          style: const TextStyle(fontSize: 11),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                backgroundColor: const Color(0xFFF59E0B),
-                duration: const Duration(seconds: 8),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                action: SnackBarAction(
-                  label: 'Ver historial',
-                  textColor: Colors.white,
-                  onPressed: _mostrarChangelog,
-                ),
+                  ),
+                ],
               ),
-            );
-            // Marcar como leída para no repetirla en el próximo polling
-            if (id.isNotEmpty) _marcarNotificacionLeida(id);
-          }
+              backgroundColor: const Color(0xFF15803D),
+              duration: const Duration(seconds: 9),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              action: tienePedidoPropio
+                  ? SnackBarAction(
+                      label: 'Confirmar',
+                      textColor: Colors.white,
+                      onPressed: () {
+                        _cambiarMetodoPagoPedido(pedidoId, 'transferencia', true);
+                      },
+                    )
+                  : SnackBarAction(
+                      label: 'OK',
+                      textColor: Colors.white,
+                      onPressed: () {},
+                    ),
+            ),
+          );
         }
+
+        _marcarNotificacionLeida(id);
+        break; // Mostrar una por ciclo para no pisar alertas simultáneas
       }
     } catch (_) {}
   }
@@ -841,71 +959,10 @@ class _PortalScreenState extends State<PortalScreen> {
     } catch (_) {}
   }
 
-  // ── Consulta de pagos de local / retiro (sin filtro de cadete) ──
-  Future<void> _consultarNotificacionesLocal() async {
-    if (!_modoVerificacionPagos) return;
-    try {
-      final res = await http.get(
-        Uri.parse('https://chefsy.xyz/api/notificaciones-pagos?noLeidas=1'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer chefsy_expo_secure_track_99XQ',
-        },
-      ).timeout(const Duration(seconds: 8));
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['ok'] == true && data['notificaciones'] is List) {
-          final lista = data['notificaciones'] as List;
-          if (lista.isNotEmpty && mounted) {
-            final n = lista.first;
-            final id = n['id']?.toString() ?? '';
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.payment_rounded, color: Colors.white, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Pago de local pendiente',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text(
-                            'Cadete: ${n['cadete_nombre'] ?? '-'} | Monto: ${n['monto'] ?? '-'}',
-                            style: const TextStyle(fontSize: 11),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                backgroundColor: const Color(0xFFF59E0B),
-                duration: const Duration(seconds: 8),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                action: SnackBarAction(
-                  label: 'Ver historial',
-                  textColor: Colors.white,
-                  onPressed: _mostrarChangelog,
-                ),
-              ),
-            );
-            if (id.isNotEmpty) _marcarNotificacionLeida(id);
-          }
-        }
-      }
-    } catch (_) {}
-  }
-
-  // Consulta pagos de cadete y de local en un solo ciclo de polling
+  // Consulta notificaciones de pago (cadete + local) en una sola petición ligera
   Future<void> _consultarTodasNotificaciones() async {
+    if (_cadeteEliminado) return;
     await _consultarNotificacionesPagos();
-    await _consultarNotificacionesLocal();
   }
 
   void _mostrarChangelog() {
@@ -1084,6 +1141,11 @@ class _PortalScreenState extends State<PortalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Si el cadete fue eliminado, mostrar bloqueo total
+    if (_cadeteEliminado) {
+      return BloqueoCadeteEliminado(motivo: _motivoBloqueo);
+    }
+
     return Scaffold(
       key: _scaffoldKey,
       endDrawer: DrawerRendimientoCadete(
