@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -13,6 +14,7 @@ const String secretToken = 'chefsy_expo_secure_track_99XQ';
 // Estando detenido, entra en reposo enviando solo un heartbeat cada 60s para ahorrar batería y cuota.
 const Duration intervaloMinimoMovimiento = Duration(milliseconds: 2500);
 const Duration heartbeatGpsQuieto = Duration(seconds: 60);
+const Duration watchdogStreamStale = Duration(seconds: 16);
 const double distanciaMinimaMovimientoMetros = 3.0;
 
 void initForegroundTask() {
@@ -42,8 +44,11 @@ void initForegroundTask() {
 class GpsTaskHandler extends TaskHandler {
   SharedPreferences? _prefs;
   bool _ocupado = false;
+  bool _sondeoGpsEnCurso = false;
   StreamSubscription<Position>? _positionStreamSub;
   DateTime? _ultimoReporteTime;
+  DateTime? _ultimoFixStreamTime;
+  DateTime? _ultimoSondeoWatchdogTime;
   Position? _ultimaPosicionValida;
   Position? _ultimaPosicionEnviada;
   double? _ultimaLatitudSimuladaEnviada;
@@ -80,6 +85,7 @@ class GpsTaskHandler extends TaskHandler {
             timeLimit: const Duration(seconds: 4),
           );
           _ultimaPosicionValida = initialPos;
+          _ultimoFixStreamTime = DateTime.now();
           _enviarUbicacionReal(initialPos);
         } catch (_) {
           try {
@@ -91,25 +97,107 @@ class GpsTaskHandler extends TaskHandler {
           } catch (_) {}
         }
 
-        // 2. Escuchar cambios continuos de posición con filtro sensible
-        final positionStream = Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 3,
-          ),
-        );
-
-        _positionStreamSub = positionStream.listen(
-          (Position position) {
-            _ultimaPosicionValida = position;
-            _enviarUbicacionReal(position);
-          },
-          onError: (_) {},
-        );
+        // 2. Escuchar cambios continuos de posición con configuración Android activa
+        _iniciarStreamPosicion();
       } else {
         _enviarUbicacionSimulada();
       }
     } catch (_) {}
+  }
+
+  /// Inicia o reinicia la suscripción al stream continuo de GPS.
+  /// En Android usa AndroidSettings con intervalDuration explícito para que
+  /// FusedLocationProvider no duerma el rastreo al frenar con pantalla apagada.
+  void _iniciarStreamPosicion() {
+    _positionStreamSub?.cancel();
+    _positionStreamSub = null;
+
+    final LocationSettings settings = defaultTargetPlatform == TargetPlatform.android
+        ? AndroidSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 3,
+            intervalDuration: const Duration(seconds: 3),
+          )
+        : const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 3,
+          );
+
+    final positionStream = Geolocator.getPositionStream(locationSettings: settings);
+
+    _positionStreamSub = positionStream.listen(
+      (Position position) {
+        _ultimaPosicionValida = position;
+        _ultimoFixStreamTime = DateTime.now();
+        _enviarUbicacionReal(position);
+      },
+      onError: (_) {
+        // Si Android corta el stream (pérdida momentánea de señal/Doze),
+        // lo marcamos nulo para que el watchdog lo recupere automáticamente.
+        _positionStreamSub?.cancel();
+        _positionStreamSub = null;
+      },
+      onDone: () {
+        _positionStreamSub = null;
+      },
+      cancelOnError: false,
+    );
+  }
+
+  /// Watchdog anti-congelamiento: si el stream lleva >16s sin emitir un fix nuevo,
+  /// fuerza una lectura fresca del chip GPS; si el cadete se desplazó mientras
+  /// el stream estaba dormido, envía la posición nueva y reinicia el stream.
+  Future<void> _sondearGpsFrescoSiCongelado() async {
+    if (_sondeoGpsEnCurso) return;
+    final ahora = DateTime.now();
+
+    if (_positionStreamSub == null) {
+      _iniciarStreamPosicion();
+    }
+
+    final streamSinDatos = _ultimoFixStreamTime == null ||
+        ahora.difference(_ultimoFixStreamTime!) >= watchdogStreamStale;
+    if (!streamSinDatos) return;
+
+    final puedeSondear = _ultimoSondeoWatchdogTime == null ||
+        ahora.difference(_ultimoSondeoWatchdogTime!) >= watchdogStreamStale;
+    if (!puedeSondear) return;
+
+    _sondeoGpsEnCurso = true;
+    _ultimoSondeoWatchdogTime = ahora;
+
+    try {
+      final posFresca = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 6),
+      );
+
+      final anterior = _ultimaPosicionValida;
+      final seDesplazoSinStream = anterior != null &&
+          Geolocator.distanceBetween(
+                anterior.latitude,
+                anterior.longitude,
+                posFresca.latitude,
+                posFresca.longitude,
+              ) >=
+              8.0;
+
+      _ultimaPosicionValida = posFresca;
+      _ultimoFixStreamTime = DateTime.now();
+      _enviarUbicacionReal(posFresca, forzar: seDesplazoSinStream);
+
+      // El cadete se movió y el stream no lo había reportado: reiniciar suscripción Android
+      if (seDesplazoSinStream) {
+        _iniciarStreamPosicion();
+      }
+    } catch (_) {
+      // Si el fix activo falló (ej. bajo techo), intentamos al menos re-suscribir si murió
+      if (_positionStreamSub == null) {
+        _iniciarStreamPosicion();
+      }
+    } finally {
+      _sondeoGpsEnCurso = false;
+    }
   }
 
   /// Verifica si hay pedidos recién asignados mientras la app corre en segundo plano
@@ -210,24 +298,12 @@ class GpsTaskHandler extends TaskHandler {
     if (simActiva) {
       _enviarUbicacionSimulada();
     } else {
-      // Revaluar el último punto en cada tick también envía un movimiento
-      // pendiente si el stream se detuvo justo antes de vencer el throttle.
+      // 1. Watchdog: detecta si Android durmió o cortó el stream GPS tras frenar en una entrega
+      await _sondearGpsFrescoSiCongelado();
+
+      // 2. Revaluar el último punto en cada tick para despachar buffer o heartbeat quieto
       if (_ultimaPosicionValida != null) {
         _enviarUbicacionReal(_ultimaPosicionValida!);
-      } else {
-        final ahora = DateTime.now();
-        if (_ultimoReporteTime == null ||
-            ahora.difference(_ultimoReporteTime!) >= heartbeatGpsQuieto) {
-          try {
-            final pos = await Geolocator.getLastKnownPosition() ??
-                await Geolocator.getCurrentPosition(
-                  desiredAccuracy: LocationAccuracy.medium,
-                  timeLimit: const Duration(seconds: 3),
-                );
-            _ultimaPosicionValida = pos;
-            _enviarUbicacionReal(pos, forzar: true);
-          } catch (_) {}
-        }
       }
     }
   }

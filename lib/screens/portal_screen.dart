@@ -817,7 +817,8 @@ class _PortalScreenState extends State<PortalScreen> {
           // Disparar reporte inmediato de GPS al servidor
           reportarUbicacionAhora();
         } else if (nuevoEstado == 'entregado') {
-          // Si entregó un pedido, actualizar de inmediato las métricas y ranking
+          // Confirmar ubicación exacta al entregar y refrescar métricas/ranking
+          reportarUbicacionAhora();
           _cargarRendimiento();
         }
         _fetchPedidosSilencioso();
